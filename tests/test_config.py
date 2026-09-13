@@ -17,6 +17,7 @@ projects:
       - name: Smoke
         definition_id: 12
         role: smoke-test
+        repository: agents
 """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.yml"
@@ -24,6 +25,26 @@ projects:
             config = load_config(path)
 
         self.assertEqual(config.pipelines[0].definition_id, 12)
+        self.assertEqual(config.pipelines[0].repository, "agents")
+
+    def test_rejects_pipeline_repository_not_declared_by_its_project(self):
+        content = """
+organization_url: https://dev.azure.com/example
+projects:
+  - name: Platform
+    repositories:
+      - name: agents
+    pipelines:
+      - name: Smoke
+        definition_id: 12
+        role: smoke-test
+        repository: another-repository
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yml"
+            path.write_text(content)
+            with self.assertRaisesRegex(ConfigError, "another-repository"):
+                load_config(path)
 
     def test_rejects_agent_pool_in_pipeline_configuration(self):
         content = """

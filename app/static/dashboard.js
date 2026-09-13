@@ -5,20 +5,22 @@ const tests = (item) => `${item.tests.passed}/${item.tests.total} passed${item.t
 const escapeHtml = (value) => String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 const link = (url, label) => url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>` : "-";
 
-function pipelineTable(items) {
-  if (!items.length) return "<p class=\"empty\">No configured pipelines.</p>";
-  const rows = items.map((item) => `<tr><td>${escapeHtml(item.pipeline.project)}</td><td>${escapeHtml(item.pipeline.name)}<br><small>${escapeHtml(item.pipeline.role)}</small></td><td><span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span></td><td>${escapeHtml(item.run_number || "No runs")}</td><td>${escapeHtml(item.branch || "-")}</td><td>${escapeHtml(item.agent_pool || "Unknown")}</td><td>${escapeHtml(tests(item))}</td><td>${link(item.run_url, "Open run")}</td></tr>`).join("");
-  return `<table class="table"><thead><tr><th>Project</th><th>Pipeline</th><th>Result</th><th>Latest run</th><th>Branch</th><th>Agent pool</th><th>Tests</th><th>Azure DevOps</th></tr></thead><tbody>${rows}</tbody></table>`;
+function repositoryTable(items) {
+  if (!items.length) return "<p class=\"empty\">No configured repositories.</p>";
+  const rows = items.map((item) => {
+    const run = item.latest_run;
+    return `<tr><td>${escapeHtml(item.project)}</td><td>${escapeHtml(item.repository)}</td><td>${escapeHtml(item.branch)}</td><td><span class="status ${statusClass(item.health)}">${escapeHtml(item.health)}</span></td><td>${run ? escapeHtml(run.pipeline.name) : "No associated pipeline"}</td><td>${run ? escapeHtml(run.run_number || "No run") : "-"}</td><td>${run ? escapeHtml(run.started_at || "-") : "-"}</td><td>${run ? escapeHtml(run.completed_at || "-") : "-"}</td><td>${run ? escapeHtml(tests(run)) : "-"}</td><td>${run ? link(run.run_url, "Open run") : "-"}</td></tr>`;
+  }).join("");
+  return `<table class="table"><thead><tr><th>Project</th><th>Repository</th><th>Branch</th><th>Health</th><th>Pipeline</th><th>Latest run</th><th>Started</th><th>Completed</th><th>Tests</th><th>Azure DevOps</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderRows(container, items, render) { container.innerHTML = items.length ? items.map(render).join("") : "<p class=\"empty\">No items to show.</p>"; }
 
 function render(data) {
-  const metrics = [[data.summary.pipelines_monitored, "Pipelines"], [data.summary.succeeded, "Succeeded"], [data.summary.failed, "Failed"], [data.summary.running, "Running"], [data.summary.smoke_test_failures, "Smoke failures"], [data.summary.pr_validation_failures, "PR validation failures"]];
+  const metrics = [[data.summary.repositories_monitored, "Repositories"], [data.summary.healthy, "Healthy"], [data.summary.failing, "Failing"], [data.summary.running, "Running"], [data.summary.unknown, "Unknown"]];
   $("#summary").innerHTML = metrics.map(([number, label]) => `<div class="metric"><strong>${number}</strong><span>${label}</span></div>`).join("");
-  $("#pipelines").innerHTML = pipelineTable(data.pipelines);
-  const smokes = data.pipelines.filter((item) => item.pipeline.role === "smoke-test");
-  renderRows($("#smoke-list"), smokes, (item) => `<article class="row"><h3>${escapeHtml(item.pipeline.project)} / ${escapeHtml(item.pipeline.name)} <span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span></h3><p>Run: ${link(item.run_url, item.run_number || "No run")} | Tests: ${escapeHtml(tests(item))} | Agent pool: ${escapeHtml(item.agent_pool || "Unknown")}</p></article>`);
+  $("#repositories").innerHTML = repositoryTable(data.repositories);
+  renderRows($("#smoke-list"), data.smoke_tests, (item) => `<article class="row"><h3>${escapeHtml(item.pipeline.project)} / ${escapeHtml(item.pipeline.name)} <span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span></h3><p>Run: ${link(item.run_url, item.run_number || "No run")} | Tests: ${escapeHtml(tests(item))} | Agent pool: ${escapeHtml(item.agent_pool || "Unknown")}</p></article>`);
   renderRows($("#pr-list"), data.pull_requests, (pr) => `<article class="row"><h3>${escapeHtml(pr.pr_id ? `PR ${pr.pr_id}: ${pr.title}` : pr.title)}</h3><p>${escapeHtml(pr.project)} / ${escapeHtml(pr.repository)} | ${escapeHtml(pr.source_branch)} to ${escapeHtml(pr.target_branch)} | ${link(pr.url, "Open PR")}</p>${pr.error ? `<p class="error">${escapeHtml(pr.error)}</p>` : pr.validations.map((item) => `<p>${escapeHtml(item.pipeline.name)}: <span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span> ${link(item.run_url, item.run_number || "No run")} | ${escapeHtml(tests(item))} | Agent pool: ${escapeHtml(item.agent_pool || "Unknown")}</p>`).join("") || "<p>No configured validation pipelines.</p>"}</article>`);
 }
 

@@ -61,6 +61,7 @@ def load_config(path: Path) -> DashboardConfig:
     for raw_project in raw_projects:
         project_name = str(_required(raw_project, "name", "project"))
         repositories = tuple(RepositorySpec(name=str(_required(repo, "name", f"project {project_name} repository"))) for repo in raw_project.get("repositories", []))
+        repository_names = {repository.name for repository in repositories}
         projects.append(ProjectConfig(name=project_name, repositories=repositories))
         for raw_pipeline in raw_project.get("pipelines", []):
             unexpected_fields = set(raw_pipeline) - PIPELINE_FIELDS
@@ -76,6 +77,11 @@ def load_config(path: Path) -> DashboardConfig:
             role = str(_required(raw_pipeline, "role", f"pipeline {pipeline_name}"))
             if role not in VALID_ROLES:
                 raise ConfigError(f"pipeline {pipeline_name!r} has invalid role {role!r}; expected one of {sorted(VALID_ROLES)}.")
+            repository = raw_pipeline.get("repository")
+            if repository is not None and repository not in repository_names:
+                raise ConfigError(
+                    f"pipeline {pipeline_name!r} references repository {repository!r}, which is not configured for project {project_name!r}."
+                )
             pipeline_identities.add(identity)
             pipelines.append(
                 PipelineSpec(
@@ -83,7 +89,7 @@ def load_config(path: Path) -> DashboardConfig:
                     name=pipeline_name,
                     definition_id=definition_id,
                     role=role,
-                    repository=raw_pipeline.get("repository"),
+                    repository=repository,
                 )
             )
 

@@ -9,12 +9,15 @@ projects:
       - name: "REPLACE: agent image build"
         definition_id: 1001
         role: image-build
+        repository: agent-infrastructure
       - name: "REPLACE: agent deployment"
         definition_id: 1002
         role: deployment
+        repository: agent-infrastructure
       - name: "REPLACE: platform smoke tests"
         definition_id: 1003
         role: smoke-test
+        repository: agent-infrastructure
 
   - name: Shared Pipeline Templates
     repositories:
@@ -28,3 +31,4 @@ projects:
       - name: "REPLACE: template smoke tests"
         definition_id: 2002
         role: smoke-test
+        repository: TestConfig

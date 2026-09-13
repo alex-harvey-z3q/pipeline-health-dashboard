@@ -13,7 +13,7 @@ def quote(value: str) -> str:
 
 
 def latest_build(client: AzureDevOpsClient, project: str, definition_id: int, branch: str | None = None) -> dict[str, Any] | None:
-    query = {"definitions": definition_id, "$top": 1, "queryOrder": "finishTimeDescending", "api-version": "7.1"}
+    query = {"definitions": definition_id, "$top": 1, "queryOrder": "queueTimeDescending", "api-version": "7.1"}
     if branch:
         query["branchName"] = branch
     response = client.get(f"/{quote(project)}/_apis/build/builds?{urllib.parse.urlencode(query)}")

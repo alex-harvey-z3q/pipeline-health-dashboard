@@ -59,6 +59,24 @@ class PipelineHealth:
 
 
 @dataclass
+class RepositoryHealth:
+    project: str
+    repository: str
+    branch: str = "main"
+    health: str = "unknown"
+    latest_run: PipelineHealth | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "project": self.project,
+            "repository": self.repository,
+            "branch": self.branch,
+            "health": self.health,
+            "latest_run": self.latest_run.as_dict() if self.latest_run else None,
+        }
+
+
+@dataclass
 class PullRequestHealth:
     project: str
     repository: str

@@ -4,16 +4,27 @@ A lightweight, server-side Azure DevOps dashboard for shared build-agent and
 pipeline-template health. It is deliberately an observer: it does not deploy
 agents, trigger smoke tests, or change pull requests.
 
-## What It Shows
+## Landing View
 
-- Overview of configured pipelines across Azure DevOps projects
-- Latest run, branch, status/result, timestamps, agent pool, test totals, and
-  Azure DevOps links
-- Active pull requests in configured repositories and their validation runs,
-  associated through the Azure DevOps PR merge ref
+- One health record for each configured repository
+- The latest associated build for `refs/heads/main`
+- Main-branch run status, start and completion times, test totals, and a link
+  to Azure DevOps
+- The runtime agent pool reported for the selected build
 
 The dashboard reports Azure DevOps and build-runtime state only. It does not
 maintain a separate mapping for images, deployments, or release traceability.
+
+Repository health is intentionally concise:
+
+- `Healthy`: the latest main-branch run completed successfully.
+- `Failing`: the latest main-branch run completed with an unsuccessful result.
+- `Running`: the latest main-branch run is in progress.
+- `Unknown`: no associated main-branch run is available, or Azure DevOps did
+  not return usable run data.
+
+Smoke-test and PR-validation details remain available in their secondary
+dashboard sections. They do not contribute separate rows to the landing view.
 
 ## Local Run
 
@@ -49,9 +60,16 @@ pair is its stable identity:
 - `pr-validation`
 - `pipeline`
 
-`pr-validation` entries can specify a repository. Active PRs are queried from
-the repositories declared for a project; the validation is associated only when
-Azure DevOps reports a build on `refs/pull/<PR ID>/merge`.
+Set `repository` on every pipeline that should contribute to main-branch
+repository health. It must match a repository declared in the same project.
+Pipelines without a repository association are not used for the landing view.
+The dashboard queries the Azure DevOps Build API with `branchName` set to
+`refs/heads/main`, so feature-branch and PR-validation builds are not fetched
+for repository health.
+
+`pr-validation` entries also use `repository` to associate validation builds
+with active pull requests. They remain in the PR Validation section and are
+queried using Azure DevOps's `refs/pull/<PR ID>/merge` ref.
 
 ### Runtime Agent Pools
 
@@ -71,8 +89,9 @@ make check
 ```
 
 Tests mock Azure DevOps responses and cover configuration parsing, build/test
-normalisation, PR merge-ref association, runtime pool discovery, and partial
-API failure isolation.
+normalisation, main-branch filtering, repository association, health-state
+calculation, PR merge-ref association, runtime pool discovery, and partial API
+failure isolation.
 
 ## Known Gaps
 
