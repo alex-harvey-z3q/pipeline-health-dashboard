@@ -88,23 +88,6 @@ No metadata source is imposed for the MVP. A future source may populate this
 contract from a deployment record, pipeline variables, Azure DevOps build
 properties, or a service that records the image/pool deployment event.
 
-## Kubernetes
-
-The manifests in `deploy/kubernetes` provide a non-root `Deployment`,
-`Service`, `ServiceAccount`, and configuration `ConfigMap`. Create a PAT secret
-separately:
-
-```sh
-kubectl create secret generic pipeline-health-dashboard \
-  --from-literal=azdo-pat="your-pat"
-kubectl apply -f deploy/kubernetes/
-```
-
-Update the image reference and ConfigMap configuration first. The service is
-`ClusterIP`; no ingress is assumed. The ServiceAccount intentionally has no
-cloud-specific annotation yet. `AZDO_AUTH_MODE=entra` is reserved as the future
-workload-identity extension point but is not implemented in this MVP.
-
 ## Testing
 
 ```sh
@@ -122,6 +105,6 @@ partial API failure isolation.
 - Azure DevOps exposes a reported build queue/pool, but does not reliably expose
   the immutable agent image used by a run. Image attribution therefore remains
   deliberately empty until exact provenance is provided.
-- The dashboard exposes health and readiness endpoints; authentication and
-  ingress policy should be selected by the target Kubernetes environment before
-  exposing it beyond a trusted internal network.
+- Container orchestration, ingress, and Kubernetes identity integration are
+  intentionally deferred until their target environment and access requirements
+  are known.
