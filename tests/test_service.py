@@ -13,7 +13,7 @@ class FakeClient:
             return {"value": [{"totalTests": 2, "passedTests": 1, "failedTests": 1}]}
         if "branchName=refs%2Fpull%2F42%2Fmerge" in path:
             return {"value": [{"id": 9, "uri": "vstfs:///Build/Build/9", "buildNumber": "9", "status": "completed", "result": "failed"}]}
-        return {"value": [{"id": 7, "uri": "vstfs:///Build/Build/7", "buildNumber": "7", "status": "completed", "result": "succeeded", "queue": {"name": "pool-a"}}]}
+        return {"value": [{"id": 7, "uri": "vstfs:///Build/Build/7", "buildNumber": "7", "status": "completed", "result": "succeeded", "queue": {"name": "legacy-queue-name", "pool": {"name": "pool-a"}}}]}
 
 
 class ServiceTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class ServiceTests(unittest.TestCase):
         dashboard = collect_dashboard(config, FakeClient())
 
         self.assertEqual(dashboard["summary"]["pipelines_monitored"], 2)
-        self.assertEqual(dashboard["pipelines"][0]["reported_agent_pool"], "pool-a")
+        self.assertEqual(dashboard["pipelines"][0]["agent_pool"], "pool-a")
         self.assertEqual(dashboard["pull_requests"][0]["pr_id"], 42)
         self.assertEqual(dashboard["pull_requests"][0]["validations"][0]["result"], "failed")
 
@@ -40,3 +40,14 @@ class ServiceTests(unittest.TestCase):
 
         self.assertEqual(item.status, "error")
         self.assertIn("unavailable", item.error)
+
+    def test_pipeline_without_queue_information_reports_unknown_pool(self):
+        class PoollessClient:
+            def get(self, path):
+                if "test/runs" in path:
+                    return {"value": []}
+                return {"value": [{"id": 7, "uri": "vstfs:///Build/Build/7", "buildNumber": "7", "status": "completed", "result": "succeeded"}]}
+
+        item = pipeline_health(PoollessClient(), PipelineSpec(project="Platform", name="Smoke", definition_id=1, role="smoke-test"))
+
+        self.assertEqual(item.agent_pool, "Unknown")

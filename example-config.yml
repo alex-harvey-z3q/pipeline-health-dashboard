@@ -12,11 +12,9 @@ projects:
       - name: "REPLACE: agent deployment"
         definition_id: 1002
         role: deployment
-        agent_pool: "REPLACE: target agent pool"
       - name: "REPLACE: platform smoke tests"
         definition_id: 1003
         role: smoke-test
-        agent_pool: "REPLACE: target agent pool"
 
   - name: Shared Pipeline Templates
     repositories:
@@ -27,7 +25,6 @@ projects:
         definition_id: 2001
         role: pr-validation
         repository: Examples
-        agent_pool: "REPLACE: target agent pool"
       - name: "REPLACE: template smoke tests"
         definition_id: 2002
         role: smoke-test
@@ -51,7 +48,6 @@ provenance:
       pipeline_definition_id: 1003
       run_id: 12346
       deployment_id: "REPLACE: deployment record ID"
-      agent_pool: "REPLACE: target agent pool"
       image_version: "REPLACE: immutable image version"
       image_build:
         project: Shared Platform Services

@@ -19,8 +19,9 @@ The initial configuration is set up for these project and repository names:
 - `Shared Platform Services` / `agent-infrastructure`
 - `Shared Pipeline Templates` / `Examples`, `TestConfig`
 
-Pipeline definition IDs, pool names, and deployment metadata are always
-configuration, never application constants.
+Pipeline definition IDs and deployment metadata are configuration, never
+application constants. Execution pool names are discovered from each Azure
+DevOps build at runtime.
 
 ## Provenance Rule
 
@@ -69,6 +70,14 @@ pair is its stable identity:
 the repositories declared for a project; the validation is associated only when
 Azure DevOps reports a build on `refs/pull/<PR ID>/merge`.
 
+### Runtime Agent Pools
+
+Configured pipelines do not include an `agent_pool`. For each displayed run,
+the backend calls Azure DevOps `GET /{project}/_apis/build/builds` and reads the
+specific build's `queue.pool.name`, falling back to `queue.name` when necessary.
+If neither field is available, the API and UI display `Unknown`. The dashboard
+does not use a configured pool fallback.
+
 The optional `provenance` section supports trusted, exact metadata:
 
 ```yaml
@@ -77,7 +86,6 @@ pipeline_runs:
     pipeline_definition_id: 1003
     run_id: 12346
     deployment_id: deployment-2026-09-13-01
-    agent_pool: shared-linux-pool
     image_version: 2026.09.13.1
     image_build:
       project: Shared Platform Services
@@ -85,6 +93,10 @@ pipeline_runs:
       run_id: 12345
       version: 2026.09.13.1
 ```
+
+Deployment provenance may still include `agent_pool` when it records the actual
+target pool used for that deployment. It is separate from the execution pool
+discovered for a pipeline run.
 
 No metadata source is imposed for the MVP. A future source may populate this
 contract from a deployment record, pipeline variables, Azure DevOps build
@@ -102,8 +114,8 @@ partial API failure isolation.
 
 ## Known Gaps
 
-- Real pipeline definition IDs, pool names, and deployment metadata still need
-  to be supplied in `config.yml`.
+- Real pipeline definition IDs and deployment metadata still need to be
+  supplied in `config.yml`.
 - Azure DevOps exposes a reported build queue/pool, but does not reliably expose
   the immutable agent image used by a run. Image attribution therefore remains
   deliberately empty until exact provenance is provided.

@@ -32,6 +32,45 @@ provenance:
         self.assertEqual(config.pipelines[0].definition_id, 12)
         self.assertEqual(config.run_provenance[0].image_version, "v1")
 
+    def test_rejects_agent_pool_in_pipeline_configuration(self):
+        content = """
+organization_url: https://dev.azure.com/example
+projects:
+  - name: Platform
+    pipelines:
+      - name: Smoke
+        definition_id: 12
+        role: smoke-test
+        agent_pool: stale-configured-pool
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yml"
+            path.write_text(content)
+            with self.assertRaisesRegex(ConfigError, "agent_pool"):
+                load_config(path)
+
+    def test_keeps_agent_pool_in_deployment_provenance(self):
+        content = """
+organization_url: https://dev.azure.com/example
+projects:
+  - name: Platform
+    pipelines:
+      - name: Smoke
+        definition_id: 12
+        role: smoke-test
+provenance:
+  deployments:
+    - deployment_id: deploy-1
+      environment: development
+      agent_pool: target-pool
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yml"
+            path.write_text(content)
+            config = load_config(path)
+
+        self.assertEqual(config.deployments[0].agent_pool, "target-pool")
+
     def test_rejects_unknown_pipeline_role(self):
         content = """
 organization_url: https://dev.azure.com/example

@@ -13,7 +13,6 @@ class PipelineSpec:
     definition_id: int
     role: str
     repository: str | None = None
-    agent_pool: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,7 +77,7 @@ class PipelineHealth:
     started_at: str | None = None
     completed_at: str | None = None
     run_url: str | None = None
-    reported_agent_pool: str | None = None
+    agent_pool: str = "Unknown"
     tests: TestSummary = field(default_factory=TestSummary)
     provenance: RunProvenance | None = None
     error: str | None = None

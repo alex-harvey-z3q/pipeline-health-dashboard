@@ -6,7 +6,7 @@ import concurrent.futures
 from dataclasses import asdict
 from typing import Any
 
-from app.azdo.builds import latest_build
+from app.azdo.builds import execution_pool_name, latest_build
 from app.azdo.client import AzureDevOpsClient, AzureDevOpsError
 from app.azdo.pull_requests import active_pull_requests, validation_branch
 from app.azdo.tests import test_summary
@@ -30,7 +30,7 @@ def pipeline_health(client: AzureDevOpsClient, pipeline: PipelineSpec, branch: s
             started_at=build.get("startTime"),
             completed_at=build.get("finishTime"),
             run_url=build.get("_links", {}).get("web", {}).get("href"),
-            reported_agent_pool=build.get("queue", {}).get("name"),
+            agent_pool=execution_pool_name(build),
             tests=test_summary(client, pipeline.project, build["uri"]),
         )
     except (AzureDevOpsError, KeyError, TypeError) as error:

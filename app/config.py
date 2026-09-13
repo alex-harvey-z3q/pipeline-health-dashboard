@@ -12,6 +12,7 @@ from app.models import DeploymentProvenance, ImageBuildRef, PipelineSpec, Reposi
 
 
 VALID_ROLES = {"image-build", "deployment", "smoke-test", "pr-validation", "pipeline"}
+PIPELINE_FIELDS = {"name", "definition_id", "role", "repository"}
 
 
 class ConfigError(ValueError):
@@ -70,6 +71,11 @@ def load_config(path: Path) -> DashboardConfig:
         repositories = tuple(RepositorySpec(name=str(_required(repo, "name", f"project {project_name} repository"))) for repo in raw_project.get("repositories", []))
         projects.append(ProjectConfig(name=project_name, repositories=repositories))
         for raw_pipeline in raw_project.get("pipelines", []):
+            unexpected_fields = set(raw_pipeline) - PIPELINE_FIELDS
+            if unexpected_fields:
+                raise ConfigError(
+                    f"pipeline in {project_name} has unsupported fields: {sorted(unexpected_fields)}."
+                )
             pipeline_name = str(_required(raw_pipeline, "name", f"pipeline in {project_name}"))
             definition_id = int(_required(raw_pipeline, "definition_id", f"pipeline {pipeline_name}"))
             identity = (project_name, definition_id)
@@ -86,7 +92,6 @@ def load_config(path: Path) -> DashboardConfig:
                     definition_id=definition_id,
                     role=role,
                     repository=raw_pipeline.get("repository"),
-                    agent_pool=raw_pipeline.get("agent_pool"),
                 )
             )
 
