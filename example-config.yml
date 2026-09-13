@@ -28,29 +28,3 @@ projects:
       - name: "REPLACE: template smoke tests"
         definition_id: 2002
         role: smoke-test
-
-# This section is optional. It is the only way the MVP attributes an image or
-# deployment to a run; entries must be published by a trusted deployment system.
-provenance:
-  deployments:
-    - deployment_id: "REPLACE: deployment record ID"
-      environment: "REPLACE: development cluster"
-      agent_pool: "REPLACE: target agent pool"
-      image_version: "REPLACE: immutable image version"
-      deployed_at: "2026-01-01T00:00:00Z"
-      image_build:
-        project: Shared Platform Services
-        pipeline_definition_id: 1001
-        run_id: 12345
-        version: "REPLACE: immutable image version"
-  pipeline_runs:
-    - project: Shared Platform Services
-      pipeline_definition_id: 1003
-      run_id: 12346
-      deployment_id: "REPLACE: deployment record ID"
-      image_version: "REPLACE: immutable image version"
-      image_build:
-        project: Shared Platform Services
-        pipeline_definition_id: 1001
-        run_id: 12345
-        version: "REPLACE: immutable image version"

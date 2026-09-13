@@ -21,35 +21,6 @@ class RepositorySpec:
 
 
 @dataclass(frozen=True)
-class ImageBuildRef:
-    project: str
-    pipeline_definition_id: int
-    run_id: int
-    version: str | None = None
-
-
-@dataclass(frozen=True)
-class DeploymentProvenance:
-    deployment_id: str
-    environment: str
-    agent_pool: str | None
-    image_version: str | None
-    deployed_at: str | None
-    image_build: ImageBuildRef | None = None
-
-
-@dataclass(frozen=True)
-class RunProvenance:
-    project: str
-    pipeline_definition_id: int
-    run_id: int
-    agent_pool: str | None = None
-    image_version: str | None = None
-    image_build: ImageBuildRef | None = None
-    deployment_id: str | None = None
-
-
-@dataclass(frozen=True)
 class TestSummary:
     total: int = 0
     passed: int = 0
@@ -79,7 +50,6 @@ class PipelineHealth:
     run_url: str | None = None
     agent_pool: str = "Unknown"
     tests: TestSummary = field(default_factory=TestSummary)
-    provenance: RunProvenance | None = None
     error: str | None = None
 
     def as_dict(self) -> dict[str, Any]:

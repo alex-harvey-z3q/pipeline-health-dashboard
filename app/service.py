@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import concurrent.futures
-from dataclasses import asdict
 from typing import Any
 
 from app.azdo.builds import execution_pool_name, latest_build
@@ -11,7 +10,6 @@ from app.azdo.client import AzureDevOpsClient, AzureDevOpsError
 from app.azdo.pull_requests import active_pull_requests, validation_branch
 from app.azdo.tests import test_summary
 from app.config import DashboardConfig
-from app.correlation.provenance import enrich
 from app.models import PipelineHealth, PipelineSpec, PullRequestHealth
 
 
@@ -54,8 +52,6 @@ def _collect_pr(client: AzureDevOpsClient, project: str, repository: str, pipeli
 def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dict[str, Any]:
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(config.pipelines))) as executor:
         pipeline_items = list(executor.map(lambda pipeline: pipeline_health(client, pipeline), config.pipelines))
-    for item in pipeline_items:
-        enrich(item, config.run_provenance)
 
     validation_pipelines = tuple(pipeline for pipeline in config.pipelines if pipeline.role == "pr-validation")
     targets = [(project.name, repository.name) for project in config.projects for repository in project.repositories]
@@ -68,12 +64,6 @@ def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dic
     failed = [item for item in pipeline_items if item.result in {"failed", "partiallySucceeded"}]
     smoke_failures = [item for item in failed if item.pipeline.role == "smoke-test"]
     pr_failures = [validation for pr in pull_request_items for validation in pr.validations if validation.result in {"failed", "partiallySucceeded"}]
-    deployments = [asdict(deployment) for deployment in config.deployments]
-    for deployment in deployments:
-        deployment["smoke_tests"] = [
-            item.as_dict() for item in pipeline_items if item.provenance and item.provenance.deployment_id == deployment["deployment_id"] and item.pipeline.role == "smoke-test"
-        ]
-
     return {
         "summary": {
             "pipelines_monitored": len(pipeline_items),
@@ -84,6 +74,5 @@ def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dic
             "pr_validation_failures": len(pr_failures),
         },
         "pipelines": [item.as_dict() for item in sorted(pipeline_items, key=lambda item: (item.pipeline.project, item.pipeline.name))],
-        "deployments": deployments,
         "pull_requests": [item.as_dict() for item in pull_request_items],
     }

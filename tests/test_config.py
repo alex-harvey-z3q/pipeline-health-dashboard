@@ -6,7 +6,7 @@ from app.config import ConfigError, load_config
 
 
 class ConfigTests(unittest.TestCase):
-    def test_loads_pipeline_and_explicit_provenance(self):
+    def test_loads_pipeline_configuration(self):
         content = """
 organization_url: https://dev.azure.com/example
 projects:
@@ -17,12 +17,6 @@ projects:
       - name: Smoke
         definition_id: 12
         role: smoke-test
-provenance:
-  pipeline_runs:
-    - project: Platform
-      pipeline_definition_id: 12
-      run_id: 55
-      image_version: v1
 """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.yml"
@@ -30,7 +24,6 @@ provenance:
             config = load_config(path)
 
         self.assertEqual(config.pipelines[0].definition_id, 12)
-        self.assertEqual(config.run_provenance[0].image_version, "v1")
 
     def test_rejects_agent_pool_in_pipeline_configuration(self):
         content = """
@@ -49,7 +42,7 @@ projects:
             with self.assertRaisesRegex(ConfigError, "agent_pool"):
                 load_config(path)
 
-    def test_keeps_agent_pool_in_deployment_provenance(self):
+    def test_rejects_manual_provenance_configuration(self):
         content = """
 organization_url: https://dev.azure.com/example
 projects:
@@ -59,17 +52,13 @@ projects:
         definition_id: 12
         role: smoke-test
 provenance:
-  deployments:
-    - deployment_id: deploy-1
-      environment: development
-      agent_pool: target-pool
+  pipeline_runs: []
 """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.yml"
             path.write_text(content)
-            config = load_config(path)
-
-        self.assertEqual(config.deployments[0].agent_pool, "target-pool")
+            with self.assertRaisesRegex(ConfigError, "provenance"):
+                load_config(path)
 
     def test_rejects_unknown_pipeline_role(self):
         content = """

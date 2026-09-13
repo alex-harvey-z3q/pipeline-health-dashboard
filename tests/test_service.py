@@ -20,12 +20,14 @@ class ServiceTests(unittest.TestCase):
     def test_collects_runs_and_associates_pr_by_merge_ref(self):
         validation = PipelineSpec(project="Templates", name="PR validation", definition_id=2, role="pr-validation", repository="Examples")
         smoke = PipelineSpec(project="Platform", name="Smoke", definition_id=1, role="smoke-test")
-        config = DashboardConfig("https://dev.azure.com/example", (ProjectConfig("Templates", (RepositorySpec("Examples"),)),), (smoke, validation), (), ())
+        config = DashboardConfig("https://dev.azure.com/example", (ProjectConfig("Templates", (RepositorySpec("Examples"),)),), (smoke, validation))
 
         dashboard = collect_dashboard(config, FakeClient())
 
         self.assertEqual(dashboard["summary"]["pipelines_monitored"], 2)
         self.assertEqual(dashboard["pipelines"][0]["agent_pool"], "pool-a")
+        self.assertNotIn("provenance", dashboard["pipelines"][0])
+        self.assertNotIn("deployments", dashboard)
         self.assertEqual(dashboard["pull_requests"][0]["pr_id"], 42)
         self.assertEqual(dashboard["pull_requests"][0]["validations"][0]["result"], "failed")
 

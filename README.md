@@ -9,28 +9,11 @@ agents, trigger smoke tests, or change pull requests.
 - Overview of configured pipelines across Azure DevOps projects
 - Latest run, branch, status/result, timestamps, agent pool, test totals, and
   Azure DevOps links
-- Explicitly configured agent-image deployment provenance and associated smoke
-  tests
-- Active pull requests in configured template repositories and their validation
-  runs, associated through the Azure DevOps PR merge ref
+- Active pull requests in configured repositories and their validation runs,
+  associated through the Azure DevOps PR merge ref
 
-The initial configuration is set up for these project and repository names:
-
-- `Shared Platform Services` / `agent-infrastructure`
-- `Shared Pipeline Templates` / `Examples`, `TestConfig`
-
-Pipeline definition IDs and deployment metadata are configuration, never
-application constants. Execution pool names are discovered from each Azure
-DevOps build at runtime.
-
-## Provenance Rule
-
-The dashboard will **not** attribute a pipeline failure to an image merely
-because the timestamps are close. A run displays an image, deployment, or
-originating image build only when an exact `provenance.pipeline_runs` entry
-matches its project, pipeline definition ID, and run ID. This explicit metadata can later
-be published by the deployment system, a pipeline task, or a separate trusted
-metadata service.
+The dashboard reports Azure DevOps and build-runtime state only. It does not
+maintain a separate mapping for images, deployments, or release traceability.
 
 ## Local Run
 
@@ -48,11 +31,11 @@ make run
 
 Open `http://127.0.0.1:8080`. The default loopback binding keeps the dashboard
 private on a workstation. `AZDO_PERSONAL_ACCESS_TOKEN` is also supported for
-compatibility with the earlier PoC. The PAT is read only by the backend and is
-never delivered to the browser.
+users who prefer that environment variable name. The PAT is read only by the
+backend and is never delivered to the browser.
 
-The PAT needs Build read, Code read, and Test read scope. Access to both
-configured projects is required.
+The PAT needs Build read, Code read, and Test read scope, with access to every
+configured project.
 
 ## Configuration
 
@@ -72,35 +55,14 @@ Azure DevOps reports a build on `refs/pull/<PR ID>/merge`.
 
 ### Runtime Agent Pools
 
-Configured pipelines do not include an `agent_pool`. For each displayed run,
-the backend calls Azure DevOps `GET /{project}/_apis/build/builds` and reads the
-specific build's `queue.pool.name`, falling back to `queue.name` when necessary.
-If neither field is available, the API and UI display `Unknown`. The dashboard
-does not use a configured pool fallback.
+Agent pools are properties of individual runs, not pipeline configuration. The
+dashboard retrieves the latest build for each configured pipeline and reports
+the pool recorded by Azure DevOps for that build. It uses the build's
+`queue.pool.name` when available, otherwise its `queue.name`.
 
-The optional `provenance` section supports trusted, exact metadata:
-
-```yaml
-pipeline_runs:
-  - project: Shared Platform Services
-    pipeline_definition_id: 1003
-    run_id: 12346
-    deployment_id: deployment-2026-09-13-01
-    image_version: 2026.09.13.1
-    image_build:
-      project: Shared Platform Services
-      pipeline_definition_id: 1001
-      run_id: 12345
-      version: 2026.09.13.1
-```
-
-Deployment provenance may still include `agent_pool` when it records the actual
-target pool used for that deployment. It is separate from the execution pool
-discovered for a pipeline run.
-
-No metadata source is imposed for the MVP. A future source may populate this
-contract from a deployment record, pipeline variables, Azure DevOps build
-properties, or a service that records the image/pool deployment event.
+The API exposes this value as `agent_pool` on each run. The dashboard displays
+`Unknown` when Azure DevOps has no pool information for that run. This makes a
+pool change visible without requiring a configuration update.
 
 ## Testing
 
@@ -109,16 +71,15 @@ make check
 ```
 
 Tests mock Azure DevOps responses and cover configuration parsing, build/test
-normalisation, PR merge-ref association, explicit provenance matching, and
-partial API failure isolation.
+normalisation, PR merge-ref association, runtime pool discovery, and partial
+API failure isolation.
 
 ## Known Gaps
 
-- Real pipeline definition IDs and deployment metadata still need to be
-  supplied in `config.yml`.
+- Real pipeline definition IDs still need to be supplied in `config.yml`.
 - Azure DevOps exposes a reported build queue/pool, but does not reliably expose
-  the immutable agent image used by a run. Image attribution therefore remains
-  deliberately empty until exact provenance is provided.
+  image-to-deployment relationships. Image and deployment traceability is not
+  implemented until it can be derived automatically from runtime data.
 - Container orchestration, ingress, and Kubernetes identity integration are
   intentionally deferred until their target environment and access requirements
   are known.

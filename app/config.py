@@ -8,11 +8,12 @@ from typing import Any
 
 import yaml
 
-from app.models import DeploymentProvenance, ImageBuildRef, PipelineSpec, RepositorySpec, RunProvenance
+from app.models import PipelineSpec, RepositorySpec
 
 
 VALID_ROLES = {"image-build", "deployment", "smoke-test", "pr-validation", "pipeline"}
 PIPELINE_FIELDS = {"name", "definition_id", "role", "repository"}
+CONFIGURATION_FIELDS = {"organization_url", "projects"}
 
 
 class ConfigError(ValueError):
@@ -30,8 +31,6 @@ class DashboardConfig:
     organization_url: str
     projects: tuple[ProjectConfig, ...]
     pipelines: tuple[PipelineSpec, ...]
-    deployments: tuple[DeploymentProvenance, ...]
-    run_provenance: tuple[RunProvenance, ...]
 
 
 def _required(mapping: dict[str, Any], field_name: str, context: str) -> Any:
@@ -41,22 +40,15 @@ def _required(mapping: dict[str, Any], field_name: str, context: str) -> Any:
     return value
 
 
-def _image_build(value: dict[str, Any] | None, context: str) -> ImageBuildRef | None:
-    if value is None:
-        return None
-    return ImageBuildRef(
-        project=str(_required(value, "project", context)),
-        pipeline_definition_id=int(_required(value, "pipeline_definition_id", context)),
-        run_id=int(_required(value, "run_id", context)),
-        version=value.get("version"),
-    )
-
-
 def load_config(path: Path) -> DashboardConfig:
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError) as error:
         raise ConfigError(f"Could not load configuration {path}: {error}") from error
+
+    unexpected_fields = set(payload) - CONFIGURATION_FIELDS
+    if unexpected_fields:
+        raise ConfigError(f"configuration has unsupported fields: {sorted(unexpected_fields)}.")
 
     organization_url = str(_required(payload, "organization_url", "configuration")).rstrip("/")
     raw_projects = payload.get("projects", [])
@@ -95,27 +87,4 @@ def load_config(path: Path) -> DashboardConfig:
                 )
             )
 
-    deployments = tuple(
-        DeploymentProvenance(
-            deployment_id=str(_required(raw, "deployment_id", "deployment")),
-            environment=str(_required(raw, "environment", "deployment")),
-            agent_pool=raw.get("agent_pool"),
-            image_version=raw.get("image_version"),
-            deployed_at=raw.get("deployed_at"),
-            image_build=_image_build(raw.get("image_build"), "deployment image_build"),
-        )
-        for raw in payload.get("provenance", {}).get("deployments", [])
-    )
-    run_provenance = tuple(
-        RunProvenance(
-            project=str(_required(raw, "project", "run provenance")),
-            pipeline_definition_id=int(_required(raw, "pipeline_definition_id", "run provenance")),
-            run_id=int(_required(raw, "run_id", "run provenance")),
-            agent_pool=raw.get("agent_pool"),
-            image_version=raw.get("image_version"),
-            deployment_id=raw.get("deployment_id"),
-            image_build=_image_build(raw.get("image_build"), "run provenance image_build"),
-        )
-        for raw in payload.get("provenance", {}).get("pipeline_runs", [])
-    )
-    return DashboardConfig(organization_url, tuple(projects), tuple(pipelines), deployments, run_provenance)
+    return DashboardConfig(organization_url, tuple(projects), tuple(pipelines))
