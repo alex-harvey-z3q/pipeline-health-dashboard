@@ -8,7 +8,6 @@ from typing import Any
 
 @dataclass(frozen=True)
 class PipelineSpec:
-    key: str
     project: str
     name: str
     definition_id: int
@@ -24,7 +23,8 @@ class RepositorySpec:
 
 @dataclass(frozen=True)
 class ImageBuildRef:
-    pipeline_key: str
+    project: str
+    pipeline_definition_id: int
     run_id: int
     version: str | None = None
 
@@ -42,7 +42,7 @@ class DeploymentProvenance:
 @dataclass(frozen=True)
 class RunProvenance:
     project: str
-    pipeline_key: str
+    pipeline_definition_id: int
     run_id: int
     agent_pool: str | None = None
     image_version: str | None = None

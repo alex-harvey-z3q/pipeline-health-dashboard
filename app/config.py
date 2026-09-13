@@ -33,10 +33,10 @@ class DashboardConfig:
     run_provenance: tuple[RunProvenance, ...]
 
 
-def _required(mapping: dict[str, Any], key: str, context: str) -> Any:
-    value = mapping.get(key)
+def _required(mapping: dict[str, Any], field_name: str, context: str) -> Any:
+    value = mapping.get(field_name)
     if value in (None, ""):
-        raise ConfigError(f"{context} requires {key!r}.")
+        raise ConfigError(f"{context} requires {field_name!r}.")
     return value
 
 
@@ -44,7 +44,8 @@ def _image_build(value: dict[str, Any] | None, context: str) -> ImageBuildRef | 
     if value is None:
         return None
     return ImageBuildRef(
-        pipeline_key=str(_required(value, "pipeline_key", context)),
+        project=str(_required(value, "project", context)),
+        pipeline_definition_id=int(_required(value, "pipeline_definition_id", context)),
         run_id=int(_required(value, "run_id", context)),
         version=value.get("version"),
     )
@@ -63,25 +64,26 @@ def load_config(path: Path) -> DashboardConfig:
 
     projects: list[ProjectConfig] = []
     pipelines: list[PipelineSpec] = []
-    pipeline_keys: set[str] = set()
+    pipeline_identities: set[tuple[str, int]] = set()
     for raw_project in raw_projects:
         project_name = str(_required(raw_project, "name", "project"))
         repositories = tuple(RepositorySpec(name=str(_required(repo, "name", f"project {project_name} repository"))) for repo in raw_project.get("repositories", []))
         projects.append(ProjectConfig(name=project_name, repositories=repositories))
         for raw_pipeline in raw_project.get("pipelines", []):
-            key = str(_required(raw_pipeline, "key", f"pipeline in {project_name}"))
-            if key in pipeline_keys:
-                raise ConfigError(f"pipeline key {key!r} is duplicated.")
-            role = str(_required(raw_pipeline, "role", f"pipeline {key}"))
+            pipeline_name = str(_required(raw_pipeline, "name", f"pipeline in {project_name}"))
+            definition_id = int(_required(raw_pipeline, "definition_id", f"pipeline {pipeline_name}"))
+            identity = (project_name, definition_id)
+            if identity in pipeline_identities:
+                raise ConfigError(f"pipeline {project_name!r} definition ID {definition_id} is duplicated.")
+            role = str(_required(raw_pipeline, "role", f"pipeline {pipeline_name}"))
             if role not in VALID_ROLES:
-                raise ConfigError(f"pipeline {key!r} has invalid role {role!r}; expected one of {sorted(VALID_ROLES)}.")
-            pipeline_keys.add(key)
+                raise ConfigError(f"pipeline {pipeline_name!r} has invalid role {role!r}; expected one of {sorted(VALID_ROLES)}.")
+            pipeline_identities.add(identity)
             pipelines.append(
                 PipelineSpec(
-                    key=key,
                     project=project_name,
-                    name=str(_required(raw_pipeline, "name", f"pipeline {key}")),
-                    definition_id=int(_required(raw_pipeline, "definition_id", f"pipeline {key}")),
+                    name=pipeline_name,
+                    definition_id=definition_id,
                     role=role,
                     repository=raw_pipeline.get("repository"),
                     agent_pool=raw_pipeline.get("agent_pool"),
@@ -102,7 +104,7 @@ def load_config(path: Path) -> DashboardConfig:
     run_provenance = tuple(
         RunProvenance(
             project=str(_required(raw, "project", "run provenance")),
-            pipeline_key=str(_required(raw, "pipeline_key", "run provenance")),
+            pipeline_definition_id=int(_required(raw, "pipeline_definition_id", "run provenance")),
             run_id=int(_required(raw, "run_id", "run provenance")),
             agent_pool=raw.get("agent_pool"),
             image_version=raw.get("image_version"),

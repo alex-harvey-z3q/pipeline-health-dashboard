@@ -5,9 +5,17 @@ from app.models import PipelineHealth, PipelineSpec, RunProvenance
 
 
 class ProvenanceTests(unittest.TestCase):
-    def test_only_exact_project_pipeline_and_run_matches_are_enriched(self):
-        run = PipelineHealth(pipeline=PipelineSpec("smoke", "Platform", "Smoke", 1, "smoke-test"), run_id=10)
-        provenance = (RunProvenance("Platform", "smoke", 10, image_version="v2"), RunProvenance("Platform", "smoke", 11, image_version="v3"))
+    def test_only_exact_project_definition_id_and_run_matches_are_enriched(self):
+        run = PipelineHealth(
+            pipeline=PipelineSpec(project="Platform", name="Smoke", definition_id=1, role="smoke-test"),
+            run_id=10,
+        )
+        provenance = (
+            RunProvenance(project="Templates", pipeline_definition_id=1, run_id=10, image_version="wrong-project"),
+            RunProvenance(project="Platform", pipeline_definition_id=2, run_id=10, image_version="wrong-definition"),
+            RunProvenance(project="Platform", pipeline_definition_id=1, run_id=11, image_version="wrong-run"),
+            RunProvenance(project="Platform", pipeline_definition_id=1, run_id=10, image_version="v2"),
+        )
 
         enrich(run, provenance)
 

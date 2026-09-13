@@ -18,8 +18,8 @@ class FakeClient:
 
 class ServiceTests(unittest.TestCase):
     def test_collects_runs_and_associates_pr_by_merge_ref(self):
-        validation = PipelineSpec("validation", "Templates", "PR validation", 2, "pr-validation", repository="Examples")
-        smoke = PipelineSpec("smoke", "Platform", "Smoke", 1, "smoke-test")
+        validation = PipelineSpec(project="Templates", name="PR validation", definition_id=2, role="pr-validation", repository="Examples")
+        smoke = PipelineSpec(project="Platform", name="Smoke", definition_id=1, role="smoke-test")
         config = DashboardConfig("https://dev.azure.com/example", (ProjectConfig("Templates", (RepositorySpec("Examples"),)),), (smoke, validation), (), ())
 
         dashboard = collect_dashboard(config, FakeClient())
@@ -36,7 +36,7 @@ class ServiceTests(unittest.TestCase):
 
                 raise AzureDevOpsError("Build API unavailable")
 
-        item = pipeline_health(FailingClient(), PipelineSpec("smoke", "Platform", "Smoke", 1, "smoke-test"))
+        item = pipeline_health(FailingClient(), PipelineSpec(project="Platform", name="Smoke", definition_id=1, role="smoke-test"))
 
         self.assertEqual(item.status, "error")
         self.assertIn("unavailable", item.error)

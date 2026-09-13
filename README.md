@@ -27,7 +27,7 @@ configuration, never application constants.
 The dashboard will **not** attribute a pipeline failure to an image merely
 because the timestamps are close. A run displays an image, deployment, or
 originating image build only when an exact `provenance.pipeline_runs` entry
-matches its project, pipeline key, and run ID. This explicit metadata can later
+matches its project, pipeline definition ID, and run ID. This explicit metadata can later
 be published by the deployment system, a pipeline task, or a separate trusted
 metadata service.
 
@@ -55,8 +55,9 @@ configured projects is required.
 
 ## Configuration
 
-Copy `example-config.yml` to `config.yml`. Each pipeline requires a stable key,
-display name, Azure DevOps definition ID, and a role:
+Copy `example-config.yml` to `config.yml`. Each pipeline requires a display
+name, Azure DevOps definition ID, and a role. The `(project, definition_id)`
+pair is its stable identity:
 
 - `image-build`
 - `deployment`
@@ -73,13 +74,14 @@ The optional `provenance` section supports trusted, exact metadata:
 ```yaml
 pipeline_runs:
   - project: Shared Platform Services
-    pipeline_key: platform-smoke-test
+    pipeline_definition_id: 1003
     run_id: 12346
     deployment_id: deployment-2026-09-13-01
     agent_pool: shared-linux-pool
     image_version: 2026.09.13.1
     image_build:
-      pipeline_key: agent-image-build
+      project: Shared Platform Services
+      pipeline_definition_id: 1001
       run_id: 12345
       version: 2026.09.13.1
 ```

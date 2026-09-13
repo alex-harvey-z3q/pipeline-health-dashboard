@@ -9,7 +9,11 @@ def run_provenance_for(run: PipelineHealth, provenance: tuple[RunProvenance, ...
     if run.run_id is None:
         return None
     for item in provenance:
-        if item.project == run.pipeline.project and item.pipeline_key == run.pipeline.key and item.run_id == run.run_id:
+        if (
+            item.project == run.pipeline.project
+            and item.pipeline_definition_id == run.pipeline.definition_id
+            and item.run_id == run.run_id
+        ):
             return item
     return None
 

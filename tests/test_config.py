@@ -14,14 +14,13 @@ projects:
     repositories:
       - name: agents
     pipelines:
-      - key: smoke
-        name: Smoke
+      - name: Smoke
         definition_id: 12
         role: smoke-test
 provenance:
   pipeline_runs:
     - project: Platform
-      pipeline_key: smoke
+      pipeline_definition_id: 12
       run_id: 55
       image_version: v1
 """
@@ -30,7 +29,7 @@ provenance:
             path.write_text(content)
             config = load_config(path)
 
-        self.assertEqual(config.pipelines[0].key, "smoke")
+        self.assertEqual(config.pipelines[0].definition_id, 12)
         self.assertEqual(config.run_provenance[0].image_version, "v1")
 
     def test_rejects_unknown_pipeline_role(self):
@@ -39,8 +38,7 @@ organization_url: https://dev.azure.com/example
 projects:
   - name: Platform
     pipelines:
-      - key: bad
-        name: Bad
+      - name: Bad
         definition_id: 1
         role: guessed-correlation
 """
@@ -48,4 +46,48 @@ projects:
             path = Path(directory) / "config.yml"
             path.write_text(content)
             with self.assertRaises(ConfigError):
+                load_config(path)
+
+    def test_pipeline_identity_is_project_and_definition_id(self):
+        content = """
+organization_url: https://dev.azure.com/example
+projects:
+  - name: Platform
+    pipelines:
+      - name: Platform Smoke
+        definition_id: 12
+        role: smoke-test
+  - name: Templates
+    pipelines:
+      - name: Template Smoke
+        definition_id: 12
+        role: smoke-test
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yml"
+            path.write_text(content)
+            config = load_config(path)
+
+        self.assertEqual(
+            {(pipeline.project, pipeline.definition_id) for pipeline in config.pipelines},
+            {("Platform", 12), ("Templates", 12)},
+        )
+
+    def test_rejects_duplicate_definition_id_within_a_project(self):
+        content = """
+organization_url: https://dev.azure.com/example
+projects:
+  - name: Platform
+    pipelines:
+      - name: Smoke A
+        definition_id: 12
+        role: smoke-test
+      - name: Smoke B
+        definition_id: 12
+        role: smoke-test
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yml"
+            path.write_text(content)
+            with self.assertRaisesRegex(ConfigError, "definition ID 12 is duplicated"):
                 load_config(path)
