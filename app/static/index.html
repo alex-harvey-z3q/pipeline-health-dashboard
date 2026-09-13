@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pipeline Health Dashboard</title>
+    <link rel="stylesheet" href="/dashboard.css">
+  </head>
+  <body>
+    <header>
+      <div><p>Azure DevOps</p><h1>Pipeline Health</h1></div>
+      <button id="refresh" type="button">Refresh</button>
+    </header>
+    <nav aria-label="Dashboard views"><a href="#overview">Overview</a><a href="#deployments">Agent Deployments</a><a href="#smoke-tests">Smoke Tests</a><a href="#pr-validation">PR Validation</a></nav>
+    <main>
+      <p id="updated">Loading pipeline health...</p>
+      <p id="error" class="error" hidden></p>
+      <section id="overview"><h2>Overview</h2><div id="summary" class="summary"></div><div id="pipelines" class="table-wrap"></div></section>
+      <section id="deployments"><h2>Agent Deployments</h2><div id="deployment-list" class="rows"></div></section>
+      <section id="smoke-tests"><h2>Smoke Tests</h2><div id="smoke-list" class="rows"></div></section>
+      <section id="pr-validation"><h2>PR Validation</h2><div id="pr-list" class="rows"></div></section>
+    </main>
+    <script src="/dashboard.js"></script>
+  </body>
+</html>

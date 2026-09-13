@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-health-dashboard
+  labels:
+    app.kubernetes.io/name: pipeline-health-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pipeline-health-dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pipeline-health-dashboard
+    spec:
+      serviceAccountName: pipeline-health-dashboard
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dashboard
+          image: "REPLACE: registry/pipeline-health-dashboard:tag"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AZDO_PAT
+              valueFrom:
+                secretKeyRef:
+                  name: pipeline-health-dashboard
+                  key: azdo-pat
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: pipeline-health-dashboard-config

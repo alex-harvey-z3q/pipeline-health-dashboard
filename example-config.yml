@@ -1,0 +1,63 @@
+# Copy to config.yml and replace every placeholder before use.
+organization_url: https://dev.azure.com/your-organization
+
+projects:
+  - name: Shared Platform Services
+    repositories:
+      - name: agent-infrastructure
+    pipelines:
+      - key: agent-image-build
+        name: "REPLACE: agent image build"
+        definition_id: 1001
+        role: image-build
+      - key: agent-deployment
+        name: "REPLACE: agent deployment"
+        definition_id: 1002
+        role: deployment
+        agent_pool: "REPLACE: target agent pool"
+      - key: platform-smoke-test
+        name: "REPLACE: platform smoke tests"
+        definition_id: 1003
+        role: smoke-test
+        agent_pool: "REPLACE: target agent pool"
+
+  - name: Shared Pipeline Templates
+    repositories:
+      - name: Examples
+      - name: TestConfig
+    pipelines:
+      - key: templates-pr-validation
+        name: "REPLACE: template PR validation"
+        definition_id: 2001
+        role: pr-validation
+        repository: Examples
+        agent_pool: "REPLACE: target agent pool"
+      - key: templates-smoke-test
+        name: "REPLACE: template smoke tests"
+        definition_id: 2002
+        role: smoke-test
+
+# This section is optional. It is the only way the MVP attributes an image or
+# deployment to a run; entries must be published by a trusted deployment system.
+provenance:
+  deployments:
+    - deployment_id: "REPLACE: deployment record ID"
+      environment: "REPLACE: development cluster"
+      agent_pool: "REPLACE: target agent pool"
+      image_version: "REPLACE: immutable image version"
+      deployed_at: "2026-01-01T00:00:00Z"
+      image_build:
+        pipeline_key: agent-image-build
+        run_id: 12345
+        version: "REPLACE: immutable image version"
+  pipeline_runs:
+    - project: Shared Platform Services
+      pipeline_key: platform-smoke-test
+      run_id: 12346
+      deployment_id: "REPLACE: deployment record ID"
+      agent_pool: "REPLACE: target agent pool"
+      image_version: "REPLACE: immutable image version"
+      image_build:
+        pipeline_key: agent-image-build
+        run_id: 12345
+        version: "REPLACE: immutable image version"
