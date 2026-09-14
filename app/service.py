@@ -7,12 +7,10 @@ from typing import Any
 
 from app.azdo.builds import execution_pool_name, latest_build
 from app.azdo.client import AzureDevOpsClient, AzureDevOpsError
+from app.azdo.repositories import get_repository
 from app.azdo.tests import test_summary
 from app.config import DashboardConfig
 from app.models import PipelineHealth, PipelineSpec, RepositoryHealth, TestSummary
-
-
-MAIN_BRANCH = "refs/heads/main"
 
 
 def pipeline_health(client: AzureDevOpsClient, pipeline: PipelineSpec, branch: str | None = None) -> PipelineHealth:
@@ -58,41 +56,96 @@ def _most_recent_run(runs: list[PipelineHealth]) -> PipelineHealth | None:
     return max(runs, key=lambda run: (run.completed_at or run.started_at or "", run.run_id or 0))
 
 
-def repository_healths(config: DashboardConfig, runs: list[PipelineHealth]) -> list[RepositoryHealth]:
-    health: list[RepositoryHealth] = []
-    for project in config.projects:
-        for repository in project.repositories:
-            associated_runs = [
-                run
-                for run in runs
-                if run.run_id is not None
-                and run.pipeline.role == "pipeline"
-                and run.pipeline.project == project.name
-                and run.pipeline.repository == repository.name
-            ]
-            latest_run = _most_recent_run(associated_runs)
-            health.append(
-                RepositoryHealth(
-                    project=project.name,
-                    repository=repository.name,
-                    health=repository_health_state(latest_run),
-                    latest_run=latest_run,
-                )
-            )
-    return health
+def repository_health(
+    client: AzureDevOpsClient,
+    project: str,
+    repository: str,
+    ci_pipelines: tuple[PipelineSpec, ...],
+) -> RepositoryHealth:
+    """Collect CI health for one repository's Azure DevOps default branch."""
+    try:
+        metadata = get_repository(client, project, repository)
+    except AzureDevOpsError as error:
+        return RepositoryHealth(
+            project=project,
+            repository=repository,
+            status_reason="Unable to query Azure DevOps",
+            error=str(error),
+            ci_pipeline=ci_pipelines[0] if ci_pipelines else None,
+        )
+
+    default_branch = metadata.get("defaultBranch")
+    if not isinstance(default_branch, str) or not default_branch.strip():
+        return RepositoryHealth(
+            project=project,
+            repository=repository,
+            status_reason="Default branch unknown",
+            ci_pipeline=ci_pipelines[0] if ci_pipelines else None,
+        )
+
+    if not ci_pipelines:
+        return RepositoryHealth(
+            project=project,
+            repository=repository,
+            default_branch=default_branch,
+            status_reason="No CI pipeline configured",
+        )
+
+    runs = [pipeline_health(client, pipeline, default_branch) for pipeline in ci_pipelines]
+    successful_queries = [run for run in runs if run.run_id is not None]
+    latest_run = _most_recent_run(successful_queries)
+    if latest_run:
+        return RepositoryHealth(
+            project=project,
+            repository=repository,
+            default_branch=default_branch,
+            health=repository_health_state(latest_run),
+            ci_pipeline=latest_run.pipeline,
+            latest_run=latest_run,
+        )
+
+    failed_query = next((run for run in runs if run.status == "error"), None)
+    if failed_query:
+        return RepositoryHealth(
+            project=project,
+            repository=repository,
+            default_branch=default_branch,
+            status_reason="Unable to query Azure DevOps",
+            error=failed_query.error,
+            ci_pipeline=failed_query.pipeline,
+        )
+    return RepositoryHealth(
+        project=project,
+        repository=repository,
+        default_branch=default_branch,
+        status_reason=f"No builds found on {default_branch.removeprefix('refs/heads/')}",
+        ci_pipeline=ci_pipelines[0],
+    )
 
 
 def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dict[str, Any]:
-    main_branch_pipelines = tuple(
-        pipeline
-        for pipeline in config.pipelines
-        if pipeline.repository is not None and pipeline.role == "pipeline"
-    )
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(main_branch_pipelines))) as executor:
-        main_branch_runs = list(
-            executor.map(lambda pipeline: pipeline_health(client, pipeline, MAIN_BRANCH), main_branch_pipelines)
+    repository_targets = [
+        (
+            project.name,
+            repository.name,
+            tuple(
+                pipeline
+                for pipeline in config.pipelines
+                if pipeline.role == "pipeline"
+                and pipeline.project == project.name
+                and pipeline.repository == repository.name
+            ),
         )
-    repositories = repository_healths(config, main_branch_runs)
+        for project in config.projects
+        for repository in project.repositories
+    ]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(repository_targets))) as executor:
+        repositories = list(
+            executor.map(
+                lambda target: repository_health(client, *target),
+                repository_targets,
+            )
+        )
 
     smoke_pipelines = tuple(pipeline for pipeline in config.pipelines if pipeline.role == "smoke-test")
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(smoke_pipelines))) as executor:

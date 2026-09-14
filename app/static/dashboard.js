@@ -9,9 +9,9 @@ function repositoryTable(items) {
   if (!items.length) return "<p class=\"empty\">No configured repositories.</p>";
   const rows = items.map((item) => {
     const run = item.latest_run;
-    return `<tr><td>${escapeHtml(item.project)}</td><td>${escapeHtml(item.repository)}</td><td>${escapeHtml(item.branch)}</td><td><span class="status ${statusClass(item.health)}">${escapeHtml(item.health)}</span></td><td>${run ? escapeHtml(run.pipeline.name) : "No associated pipeline"}</td><td>${run ? escapeHtml(run.run_number || "No run") : "-"}</td><td>${run ? escapeHtml(run.started_at || "-") : "-"}</td><td>${run ? escapeHtml(run.completed_at || "-") : "-"}</td><td>${run ? escapeHtml(tests(run)) : "-"}</td><td>${run ? link(run.run_url, "Open run") : "-"}</td></tr>`;
+    return `<tr><td>${escapeHtml(item.project)}</td><td>${escapeHtml(item.repository)}</td><td>${escapeHtml(item.branch || "Unknown")}</td><td><span class="status ${statusClass(item.health)}">${escapeHtml(item.health)}</span></td><td>${escapeHtml(item.ci_pipeline ? item.ci_pipeline.name : "-")}</td><td>${escapeHtml(item.status_reason || "-")}</td><td>${run ? escapeHtml(run.run_number || "No run") : "-"}</td><td>${run ? escapeHtml(run.started_at || "-") : "-"}</td><td>${run ? escapeHtml(run.completed_at || "-") : "-"}</td><td>${run ? escapeHtml(tests(run)) : "-"}</td><td>${run ? link(run.run_url, "Open run") : "-"}</td></tr>`;
   }).join("");
-  return `<table class="table"><thead><tr><th>Project</th><th>Repository</th><th>Branch</th><th>Health</th><th>Pipeline</th><th>Latest run</th><th>Started</th><th>Completed</th><th>Tests</th><th>Azure DevOps</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table class="table"><thead><tr><th>Project</th><th>Repository</th><th>Default branch</th><th>Health</th><th>CI pipeline</th><th>Status</th><th>Latest run</th><th>Started</th><th>Completed</th><th>Tests</th><th>Azure DevOps</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderRows(container, items, render) { container.innerHTML = items.length ? items.map(render).join("") : "<p class=\"empty\">No items to show.</p>"; }

@@ -7,8 +7,8 @@ agents, trigger smoke tests, or change pull requests.
 ## Repo CI Status
 
 - One health record for each configured repository
-- The latest associated build for `refs/heads/main`
-- Main-branch run status, start and completion times, test totals, and a link
+- The latest associated build for the repository's Azure DevOps default branch
+- Default-branch run status, start and completion times, test totals, and a link
   to Azure DevOps
 - The runtime agent pool reported for the selected build
 
@@ -17,15 +17,19 @@ maintain a separate mapping for images, deployments, or release traceability.
 
 Repository health is intentionally concise:
 
-- `Healthy`: the latest main-branch run completed successfully.
-- `Failing`: the latest main-branch run completed with an unsuccessful result.
-- `Running`: the latest main-branch run is in progress.
-- `Unknown`: no associated main-branch run is available, or Azure DevOps did
-  not return usable run data.
+- `Healthy`: the latest default-branch run completed successfully.
+- `Failing`: the latest default-branch run completed with an unsuccessful result.
+- `Running`: the latest default-branch run is in progress.
+- `Unknown`: Azure DevOps cannot supply a usable CI result.
+
+The dashboard discovers each repository's `defaultBranch` from Azure DevOps;
+it never assumes that the branch is named `main`. It shows distinct status
+messages for no configured CI pipeline, an unknown default branch, no builds
+on the discovered branch, and Azure DevOps query failures.
 
 Smoke tests appear in their own dashboard section. Pull-request validation is
 not queried or shown on the central dashboard, keeping it focused on the
-current operational state of each repository's `main` branch.
+current operational state of each repository's default branch.
 
 ## Local Run
 
@@ -56,7 +60,7 @@ name, Azure DevOps definition ID, and a role. The `(project, definition_id)`
 pair is its stable identity.
 
 - `pipeline`: normal repository CI. This is the only role used to determine
-  central main-branch repository health.
+  central repository health on the Azure DevOps default branch.
 - `smoke-test`: post-deployment validation, shown in the Smoke Tests section.
 - `deployment`: deployment or release pipeline, shown as a supporting pipeline.
 - `image-build`: image creation pipeline, shown as a supporting pipeline.
@@ -64,13 +68,14 @@ pair is its stable identity.
   role for a future dedicated view, but is not queried or shown on the landing
   dashboard.
 
-Set `repository` on every pipeline that should contribute to main-branch
+Set `repository` on every pipeline that should contribute to default-branch
 repository health. It must match a repository declared in the same project.
 Each monitored repository needs at least one associated `role: pipeline` entry
 to have meaningful landing-page health; otherwise it is shown as `Unknown`.
-The dashboard queries the Azure DevOps Build API with `branchName` set to
-`refs/heads/main`, so feature-branch, PR-validation, smoke-test, deployment,
-and image-build runs cannot determine repository health.
+The dashboard queries the Azure DevOps repository API for `defaultBranch`, then
+uses that exact ref as the Build API `branchName`. Feature-branch,
+PR-validation, smoke-test, deployment, and image-build runs cannot determine
+repository health.
 
 `pr-validation` entries may use `repository` to associate validation builds
 with pull requests in a future dedicated view. When such a view links to a
@@ -96,7 +101,7 @@ make check
 ```
 
 Tests mock Azure DevOps responses and cover configuration parsing, build/test
-normalisation, main-branch filtering, repository association, health-state
+normalisation, default-branch filtering, repository association, health-state
 calculation, runtime pool discovery, independent test-data failure handling,
 pull-request browser-link construction, and partial API failure isolation.
 

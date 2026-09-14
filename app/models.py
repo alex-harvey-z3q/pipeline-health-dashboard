@@ -64,15 +64,22 @@ class PipelineHealth:
 class RepositoryHealth:
     project: str
     repository: str
-    branch: str = "main"
+    default_branch: str | None = None
     health: str = "unknown"
+    status_reason: str | None = None
+    error: str | None = None
+    ci_pipeline: PipelineSpec | None = None
     latest_run: PipelineHealth | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "project": self.project,
             "repository": self.repository,
-            "branch": self.branch,
+            "default_branch": self.default_branch,
+            "branch": self.default_branch.removeprefix("refs/heads/") if self.default_branch else None,
             "health": self.health,
+            "status_reason": self.status_reason,
+            "error": self.error,
+            "ci_pipeline": asdict(self.ci_pipeline) if self.ci_pipeline else None,
             "latest_run": self.latest_run.as_dict() if self.latest_run else None,
         }
