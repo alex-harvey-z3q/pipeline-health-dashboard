@@ -11,12 +11,13 @@
       <div><p>Azure DevOps</p><h1>Pipeline Health</h1></div>
       <button id="refresh" type="button">Refresh</button>
     </header>
-    <nav aria-label="Dashboard views"><a href="#overview">Repository Health</a><a href="#smoke-tests">Smoke Tests</a><a href="#pr-validation">PR Validation</a></nav>
+    <nav aria-label="Dashboard views"><a href="#overview">Repository Health</a><a href="#smoke-tests">Smoke Tests</a><a href="#supporting-pipelines">Supporting Pipelines</a><a href="#pr-validation">PR Validation</a></nav>
     <main>
       <p id="updated">Loading pipeline health...</p>
       <p id="error" class="error" hidden></p>
       <section id="overview"><h2>Repository Health</h2><div id="summary" class="summary"></div><div id="repositories" class="table-wrap"></div></section>
       <section id="smoke-tests"><h2>Smoke Tests</h2><div id="smoke-list" class="rows"></div></section>
+      <section id="supporting-pipelines"><h2>Supporting Pipelines</h2><div id="supporting-pipeline-list" class="rows"></div></section>
       <section id="pr-validation"><h2>PR Validation</h2><div id="pr-list" class="rows"></div></section>
     </main>
     <script src="/dashboard.js"></script>

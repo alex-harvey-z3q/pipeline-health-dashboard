@@ -10,7 +10,7 @@ from app.azdo.client import AzureDevOpsClient, AzureDevOpsError
 from app.azdo.pull_requests import active_pull_requests, validation_branch
 from app.azdo.tests import test_summary
 from app.config import DashboardConfig
-from app.models import PipelineHealth, PipelineSpec, PullRequestHealth, RepositoryHealth
+from app.models import PipelineHealth, PipelineSpec, PullRequestHealth, RepositoryHealth, TestSummary
 
 
 MAIN_BRANCH = "refs/heads/main"
@@ -19,23 +19,28 @@ MAIN_BRANCH = "refs/heads/main"
 def pipeline_health(client: AzureDevOpsClient, pipeline: PipelineSpec, branch: str | None = None) -> PipelineHealth:
     try:
         build = latest_build(client, pipeline.project, pipeline.definition_id, branch)
-        if not build:
-            return PipelineHealth(pipeline=pipeline)
-        return PipelineHealth(
-            pipeline=pipeline,
-            run_id=build.get("id"),
-            run_number=build.get("buildNumber"),
-            status=build.get("status", "unknown"),
-            result=build.get("result"),
-            branch=build.get("sourceBranch") or branch,
-            started_at=build.get("startTime"),
-            completed_at=build.get("finishTime"),
-            run_url=build.get("_links", {}).get("web", {}).get("href"),
-            agent_pool=execution_pool_name(build),
-            tests=test_summary(client, pipeline.project, build["uri"]),
-        )
     except (AzureDevOpsError, KeyError, TypeError) as error:
         return PipelineHealth(pipeline=pipeline, status="error", error=str(error))
+    if not build:
+        return PipelineHealth(pipeline=pipeline)
+
+    health = PipelineHealth(
+        pipeline=pipeline,
+        run_id=build.get("id"),
+        run_number=build.get("buildNumber"),
+        status=build.get("status", "unknown"),
+        result=build.get("result"),
+        branch=build.get("sourceBranch") or branch,
+        started_at=build.get("startTime"),
+        completed_at=build.get("finishTime"),
+        run_url=build.get("_links", {}).get("web", {}).get("href"),
+        agent_pool=execution_pool_name(build),
+    )
+    try:
+        health.tests = test_summary(client, pipeline.project, build["uri"])
+    except (AzureDevOpsError, KeyError, TypeError, ValueError) as error:
+        health.tests = TestSummary(available=False, error=str(error))
+    return health
 
 
 def _collect_pr(client: AzureDevOpsClient, project: str, repository: str, pipeline_specs: tuple[PipelineSpec, ...]) -> list[PullRequestHealth]:
@@ -76,6 +81,7 @@ def repository_healths(config: DashboardConfig, runs: list[PipelineHealth]) -> l
                 run
                 for run in runs
                 if run.run_id is not None
+                and run.pipeline.role == "pipeline"
                 and run.pipeline.project == project.name
                 and run.pipeline.repository == repository.name
             ]
@@ -95,7 +101,7 @@ def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dic
     main_branch_pipelines = tuple(
         pipeline
         for pipeline in config.pipelines
-        if pipeline.repository is not None and pipeline.role != "pr-validation"
+        if pipeline.repository is not None and pipeline.role == "pipeline"
     )
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(main_branch_pipelines))) as executor:
         main_branch_runs = list(
@@ -107,24 +113,38 @@ def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dic
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(smoke_pipelines))) as executor:
         smoke_test_items = list(executor.map(lambda pipeline: pipeline_health(client, pipeline), smoke_pipelines))
 
-    targets = [(project.name, repository.name) for project in config.projects for repository in project.repositories]
+    supporting_pipeline_specs = tuple(
+        pipeline for pipeline in config.pipelines if pipeline.role in {"image-build", "deployment"}
+    )
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(supporting_pipeline_specs))) as executor:
+        supporting_pipeline_items = list(
+            executor.map(lambda pipeline: pipeline_health(client, pipeline), supporting_pipeline_specs)
+        )
+
+    validation_pipelines_by_repository: dict[tuple[str, str], tuple[PipelineSpec, ...]] = {}
+    for project in config.projects:
+        for repository in project.repositories:
+            pipelines = tuple(
+                pipeline
+                for pipeline in config.pipelines
+                if pipeline.role == "pr-validation"
+                and pipeline.project == project.name
+                and pipeline.repository == repository.name
+            )
+            if pipelines:
+                validation_pipelines_by_repository[(project.name, repository.name)] = pipelines
+
     pull_request_items: list[PullRequestHealth] = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(targets))) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(validation_pipelines_by_repository))) as executor:
         futures = [
             executor.submit(
                 _collect_pr,
                 client,
                 project,
                 repository,
-                tuple(
-                    pipeline
-                    for pipeline in config.pipelines
-                    if pipeline.role == "pr-validation"
-                    and pipeline.project == project
-                    and pipeline.repository == repository
-                ),
+                pipelines,
             )
-            for project, repository in targets
+            for (project, repository), pipelines in validation_pipelines_by_repository.items()
         ]
         for future in futures:
             pull_request_items.extend(future.result())
@@ -139,5 +159,6 @@ def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dic
         },
         "repositories": [item.as_dict() for item in sorted(repositories, key=lambda item: (item.project, item.repository))],
         "smoke_tests": [item.as_dict() for item in sorted(smoke_test_items, key=lambda item: (item.pipeline.project, item.pipeline.name))],
+        "supporting_pipelines": [item.as_dict() for item in sorted(supporting_pipeline_items, key=lambda item: (item.pipeline.project, item.pipeline.name))],
         "pull_requests": [item.as_dict() for item in pull_request_items],
     }

@@ -1,7 +1,7 @@
 const $ = (selector) => document.querySelector(selector);
 const statusClass = (value) => (value || "unknown").toLowerCase().replaceAll(" ", "");
 const result = (item) => item.result || item.status || "unknown";
-const tests = (item) => `${item.tests.passed}/${item.tests.total} passed${item.tests.failed ? `, ${item.tests.failed} failed` : ""}`;
+const tests = (item) => item.tests.available ? `${item.tests.passed}/${item.tests.total} passed${item.tests.failed ? `, ${item.tests.failed} failed` : ""}` : "Unavailable";
 const escapeHtml = (value) => String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 const link = (url, label) => url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>` : "-";
 
@@ -21,6 +21,7 @@ function render(data) {
   $("#summary").innerHTML = metrics.map(([number, label]) => `<div class="metric"><strong>${number}</strong><span>${label}</span></div>`).join("");
   $("#repositories").innerHTML = repositoryTable(data.repositories);
   renderRows($("#smoke-list"), data.smoke_tests, (item) => `<article class="row"><h3>${escapeHtml(item.pipeline.project)} / ${escapeHtml(item.pipeline.name)} <span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span></h3><p>Run: ${link(item.run_url, item.run_number || "No run")} | Tests: ${escapeHtml(tests(item))} | Agent pool: ${escapeHtml(item.agent_pool || "Unknown")}</p></article>`);
+  renderRows($("#supporting-pipeline-list"), data.supporting_pipelines, (item) => `<article class="row"><h3>${escapeHtml(item.pipeline.project)} / ${escapeHtml(item.pipeline.name)} <span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span></h3><p>Role: ${escapeHtml(item.pipeline.role)} | Run: ${link(item.run_url, item.run_number || "No run")} | Tests: ${escapeHtml(tests(item))} | Agent pool: ${escapeHtml(item.agent_pool || "Unknown")}</p></article>`);
   renderRows($("#pr-list"), data.pull_requests, (pr) => `<article class="row"><h3>${escapeHtml(pr.pr_id ? `PR ${pr.pr_id}: ${pr.title}` : pr.title)}</h3><p>${escapeHtml(pr.project)} / ${escapeHtml(pr.repository)} | ${escapeHtml(pr.source_branch)} to ${escapeHtml(pr.target_branch)} | ${link(pr.url, "Open PR")}</p>${pr.error ? `<p class="error">${escapeHtml(pr.error)}</p>` : pr.validations.map((item) => `<p>${escapeHtml(item.pipeline.name)}: <span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span> ${link(item.run_url, item.run_number || "No run")} | ${escapeHtml(tests(item))} | Agent pool: ${escapeHtml(item.agent_pool || "Unknown")}</p>`).join("") || "<p>No configured validation pipelines.</p>"}</article>`);
 }
 

@@ -22,10 +22,12 @@ class RepositorySpec:
 
 @dataclass(frozen=True)
 class TestSummary:
+    available: bool = True
     total: int = 0
     passed: int = 0
     failed: int = 0
     not_executed: int = 0
+    error: str | None = None
 
     @classmethod
     def from_runs(cls, runs: list[dict[str, Any]]) -> "TestSummary":

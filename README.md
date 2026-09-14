@@ -52,20 +52,22 @@ configured project.
 
 Copy `example-config.yml` to `config.yml`. Each pipeline requires a display
 name, Azure DevOps definition ID, and a role. The `(project, definition_id)`
-pair is its stable identity:
+pair is its stable identity.
 
-- `image-build`
-- `deployment`
-- `smoke-test`
-- `pr-validation`
-- `pipeline`
+- `pipeline`: normal repository CI. This is the only role used to determine
+  central main-branch repository health.
+- `smoke-test`: post-deployment validation, shown in the Smoke Tests section.
+- `deployment`: deployment or release pipeline, shown as a supporting pipeline.
+- `image-build`: image creation pipeline, shown as a supporting pipeline.
+- `pr-validation`: pull-request validation, shown in the PR Validation section.
 
 Set `repository` on every pipeline that should contribute to main-branch
 repository health. It must match a repository declared in the same project.
-Pipelines without a repository association are not used for the landing view.
+Each monitored repository needs at least one associated `role: pipeline` entry
+to have meaningful landing-page health; otherwise it is shown as `Unknown`.
 The dashboard queries the Azure DevOps Build API with `branchName` set to
-`refs/heads/main`, so feature-branch and PR-validation builds are not fetched
-for repository health.
+`refs/heads/main`, so feature-branch, PR-validation, smoke-test, deployment,
+and image-build runs cannot determine repository health.
 
 `pr-validation` entries also use `repository` to associate validation builds
 with active pull requests. They remain in the PR Validation section and are
@@ -90,8 +92,8 @@ make check
 
 Tests mock Azure DevOps responses and cover configuration parsing, build/test
 normalisation, main-branch filtering, repository association, health-state
-calculation, PR merge-ref association, runtime pool discovery, and partial API
-failure isolation.
+calculation, PR targeting, runtime pool discovery, independent test-data
+failure handling, and partial API failure isolation.
 
 ## Known Gaps
 
