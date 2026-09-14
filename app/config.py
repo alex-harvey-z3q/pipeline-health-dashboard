@@ -8,12 +8,14 @@ from typing import Any
 
 import yaml
 
-from app.models import PipelineSpec, RepositorySpec
+from app.models import PipelineSpec, RepositorySpec, ReusableTemplate, ReusableTemplatePRConfig
 
 
 VALID_ROLES = {"image-build", "deployment", "smoke-test", "pr-validation"}
 PIPELINE_FIELDS = {"name", "definition_id", "role", "repository"}
-REPOSITORY_FIELDS = {"name", "ci_definition_ids"}
+REPOSITORY_FIELDS = {"name", "ci_definition_ids", "reusable_template_prs"}
+REUSABLE_TEMPLATE_PRS_FIELDS = {"enabled", "max_age_days", "templates"}
+REUSABLE_TEMPLATE_FIELDS = {"path", "name"}
 CONFIGURATION_FIELDS = {"organization_url", "projects"}
 
 
@@ -39,6 +41,44 @@ def _required(mapping: dict[str, Any], field_name: str, context: str) -> Any:
     if value in (None, ""):
         raise ConfigError(f"{context} requires {field_name!r}.")
     return value
+
+
+def _reusable_template_pr_config(raw_config: Any, repository_name: str) -> ReusableTemplatePRConfig | None:
+    if raw_config is None:
+        return None
+    if not isinstance(raw_config, dict):
+        raise ConfigError(f"repository {repository_name!r} reusable_template_prs must be a mapping.")
+    unexpected_fields = set(raw_config) - REUSABLE_TEMPLATE_PRS_FIELDS
+    if unexpected_fields:
+        raise ConfigError(
+            f"repository {repository_name!r} reusable_template_prs has unsupported fields: {sorted(unexpected_fields)}."
+        )
+    enabled = raw_config.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError(f"repository {repository_name!r} reusable_template_prs enabled must be true or false.")
+    max_age_days = raw_config.get("max_age_days", 14)
+    if not isinstance(max_age_days, int) or max_age_days < 0:
+        raise ConfigError(f"repository {repository_name!r} reusable_template_prs max_age_days must be a non-negative integer.")
+    raw_templates = raw_config.get("templates", [])
+    if not isinstance(raw_templates, list):
+        raise ConfigError(f"repository {repository_name!r} reusable_template_prs templates must be a list.")
+    templates: list[ReusableTemplate] = []
+    for raw_template in raw_templates:
+        if not isinstance(raw_template, dict):
+            raise ConfigError(f"repository {repository_name!r} reusable template must be a mapping.")
+        unexpected_fields = set(raw_template) - REUSABLE_TEMPLATE_FIELDS
+        if unexpected_fields:
+            raise ConfigError(
+                f"repository {repository_name!r} reusable template has unsupported fields: {sorted(unexpected_fields)}."
+            )
+        path = str(_required(raw_template, "path", f"repository {repository_name} reusable template"))
+        if not path.startswith("/"):
+            raise ConfigError(f"repository {repository_name!r} reusable template path must start with '/'.")
+        name = raw_template.get("name")
+        templates.append(ReusableTemplate(path=path, name=str(name) if name is not None else None))
+    if enabled and not templates:
+        raise ConfigError(f"repository {repository_name!r} reusable_template_prs requires at least one template when enabled.")
+    return ReusableTemplatePRConfig(enabled=enabled, max_age_days=max_age_days, templates=tuple(templates))
 
 
 def load_config(path: Path) -> DashboardConfig:
@@ -75,7 +115,16 @@ def load_config(path: Path) -> DashboardConfig:
             definition_ids = tuple(int(value) for value in raw_definition_ids)
             if len(set(definition_ids)) != len(definition_ids):
                 raise ConfigError(f"repository {repository_name!r} has duplicate CI definition IDs.")
-            repositories.append(RepositorySpec(name=repository_name, ci_definition_ids=definition_ids))
+            reusable_template_prs = _reusable_template_pr_config(
+                raw_repository.get("reusable_template_prs"), repository_name
+            )
+            repositories.append(
+                RepositorySpec(
+                    name=repository_name,
+                    ci_definition_ids=definition_ids,
+                    reusable_template_prs=reusable_template_prs,
+                )
+            )
         repositories = tuple(repositories)
         repository_names = {repository.name for repository in repositories}
         projects.append(ProjectConfig(name=project_name, repositories=repositories))

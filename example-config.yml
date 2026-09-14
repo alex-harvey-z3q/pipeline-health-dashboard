@@ -21,6 +21,15 @@ projects:
 
   - name: Shared Pipeline Templates
     repositories:
+      - name: Templates
+        reusable_template_prs:
+          enabled: true
+          max_age_days: 14
+          templates:
+            - path: /templates/build.yml
+              name: Build Template
+            - path: /templates/deploy.yml
+              name: Deploy Template
       - name: Examples
       - name: TestConfig
     pipelines:

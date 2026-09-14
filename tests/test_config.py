@@ -43,6 +43,34 @@ projects:
 
         self.assertEqual(config.projects[0].repositories[0].ci_definition_ids, (12, 13))
 
+    def test_loads_reusable_template_pr_configuration(self):
+        content = """
+organization_url: https://dev.azure.com/example
+projects:
+  - name: Pipeline Templates
+    repositories:
+      - name: Templates
+        reusable_template_prs:
+          enabled: true
+          max_age_days: 14
+          templates:
+            - path: /templates/build.yml
+              name: Build Template
+            - path: /templates/deploy.yml
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yml"
+            path.write_text(content)
+            config = load_config(path)
+
+        template_config = config.projects[0].repositories[0].reusable_template_prs
+        self.assertTrue(template_config.enabled)
+        self.assertEqual(template_config.max_age_days, 14)
+        self.assertEqual([(template.path, template.name) for template in template_config.templates], [
+            ("/templates/build.yml", "Build Template"),
+            ("/templates/deploy.yml", None),
+        ])
+
     def test_rejects_pipeline_repository_not_declared_by_its_project(self):
         content = """
 organization_url: https://dev.azure.com/example

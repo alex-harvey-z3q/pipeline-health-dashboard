@@ -18,10 +18,21 @@ function repositoryTable(items) {
 
 function renderRows(container, items, render) { container.innerHTML = items.length ? items.map(render).join("") : "<p class=\"empty\">No items to show.</p>"; }
 
+function reusableTemplatePrs(items) {
+  if (!items.length) return "<p class=\"empty\">No open PRs currently modify configured reusable templates.</p>";
+  return items.map((pr) => {
+    const templates = pr.affected_templates.map((template) => template.name || template.path).join(", ");
+    const age = pr.age_days === null ? "Unknown age" : `${pr.age_days} day${pr.age_days === 1 ? "" : "s"}`;
+    const freshness = pr.stale === null ? "Unknown" : pr.stale ? "Stale" : "Fresh";
+    return `<article class="row"><h3>PR ${escapeHtml(pr.pr_id)}: ${escapeHtml(pr.title)} <span class="status ${pr.stale ? "stale" : pr.stale === false ? "fresh" : "unknown"}">${freshness}</span></h3><p>${escapeHtml(pr.project)} / ${escapeHtml(pr.repository)} | ${escapeHtml(pr.source_branch)} to ${escapeHtml(pr.target_branch)} | ${link(pr.web_url, "Open PR")}</p><p>Created: ${escapeHtml(pr.created_at || "Unknown")} | Age: ${escapeHtml(age)}${pr.author ? ` | Author: ${escapeHtml(pr.author)}` : ""}</p><p>Templates: ${escapeHtml(templates)}</p></article>`;
+  }).join("");
+}
+
 function render(data) {
   const metrics = [[data.summary.repositories_monitored, "Repositories"], [data.summary.healthy, "Healthy"], [data.summary.failing, "Failing"], [data.summary.running, "Running"], [data.summary.unknown, "Unknown"]];
   $("#summary").innerHTML = metrics.map(([number, label]) => `<div class="metric"><strong>${number}</strong><span>${label}</span></div>`).join("");
   $("#repositories").innerHTML = repositoryTable(data.repositories);
+  $("#template-pr-list").innerHTML = reusableTemplatePrs(data.reusable_template_prs || []);
   renderRows($("#smoke-list"), data.smoke_tests, (item) => `<article class="row"><h3>${escapeHtml(item.pipeline.project)} / ${escapeHtml(item.pipeline.name)} <span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span></h3><p>Run: ${link(item.run_url, item.run_number || "No run")} | Tests: ${escapeHtml(tests(item))} | Agent pool: ${escapeHtml(item.agent_pool || "Unknown")}</p></article>`);
   renderRows($("#supporting-pipeline-list"), data.supporting_pipelines, (item) => `<article class="row"><h3>${escapeHtml(item.pipeline.project)} / ${escapeHtml(item.pipeline.name)} <span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span></h3><p>Role: ${escapeHtml(item.pipeline.role)} | Run: ${link(item.run_url, item.run_number || "No run")} | Tests: ${escapeHtml(tests(item))} | Agent pool: ${escapeHtml(item.agent_pool || "Unknown")}</p></article>`);
 }

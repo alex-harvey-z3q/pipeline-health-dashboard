@@ -34,6 +34,38 @@ Smoke tests appear in their own dashboard section. Pull-request validation is
 not queried or shown on the central dashboard, keeping it focused on the
 current operational state of each repository's default branch.
 
+## Reusable Template PRs
+
+For a repository such as `Templates` that contains reusable Azure DevOps
+workflows, an optional operational section highlights open PRs that actually
+modify configured template files. It is separate from Repo CI Status and is
+not a general pull-request browser.
+
+Enable it on the relevant repository and list the exact repository-relative
+template paths to watch:
+
+```yaml
+repositories:
+  - name: Templates
+    reusable_template_prs:
+      enabled: true
+      max_age_days: 14
+      templates:
+        - path: /templates/build.yml
+          name: Build Template
+```
+
+The dashboard lists active PRs once, retains only those targeting the
+repository's Azure DevOps default branch, and fetches changed paths from the
+latest PR iteration. A PR appears only when one of those paths exactly equals a
+configured template path. It does not infer impact from a PR title or branch.
+
+PR age is the number of completed 24-hour periods since Azure DevOps recorded
+its creation time. A PR is `Fresh` at or below `max_age_days`, and `Stale` when
+it exceeds that threshold. The PR link always opens the Azure DevOps web UI.
+Validation status is intentionally not shown here because the dashboard does
+not currently have a reliable automatic PR-to-validation-run association.
+
 ## Local Run
 
 Requires Python 3.11 or later.

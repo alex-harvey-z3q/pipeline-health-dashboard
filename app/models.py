@@ -19,6 +19,20 @@ class PipelineSpec:
 class RepositorySpec:
     name: str
     ci_definition_ids: tuple[int, ...] = ()
+    reusable_template_prs: "ReusableTemplatePRConfig | None" = None
+
+
+@dataclass(frozen=True)
+class ReusableTemplate:
+    path: str
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class ReusableTemplatePRConfig:
+    enabled: bool = False
+    max_age_days: int = 14
+    templates: tuple[ReusableTemplate, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -81,4 +95,36 @@ class RepositoryHealth:
             "status_reason": self.status_reason,
             "error": self.error,
             "ci_runs": [run.as_dict() for run in self.ci_runs],
+        }
+
+
+@dataclass
+class ReusableTemplatePR:
+    project: str
+    repository: str
+    pr_id: int
+    title: str
+    source_branch: str
+    target_branch: str
+    created_at: str | None
+    age_days: int | None
+    stale: bool | None
+    affected_templates: list[ReusableTemplate]
+    web_url: str
+    author: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "project": self.project,
+            "repository": self.repository,
+            "pr_id": self.pr_id,
+            "title": self.title,
+            "source_branch": self.source_branch,
+            "target_branch": self.target_branch,
+            "created_at": self.created_at,
+            "age_days": self.age_days,
+            "stale": self.stale,
+            "affected_templates": [asdict(template) for template in self.affected_templates],
+            "web_url": self.web_url,
+            "author": self.author,
         }
