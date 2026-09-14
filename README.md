@@ -4,7 +4,7 @@ A lightweight, server-side Azure DevOps dashboard for shared build-agent and
 pipeline-template health. It is deliberately an observer: it does not deploy
 agents, trigger smoke tests, or change pull requests.
 
-## Landing View
+## Repo CI Status
 
 - One health record for each configured repository
 - The latest associated build for `refs/heads/main`
@@ -23,8 +23,9 @@ Repository health is intentionally concise:
 - `Unknown`: no associated main-branch run is available, or Azure DevOps did
   not return usable run data.
 
-Smoke-test and PR-validation details remain available in their secondary
-dashboard sections. They do not contribute separate rows to the landing view.
+Smoke tests appear in their own dashboard section. Pull-request validation is
+not queried or shown on the central dashboard, keeping it focused on the
+current operational state of each repository's `main` branch.
 
 ## Local Run
 
@@ -59,7 +60,9 @@ pair is its stable identity.
 - `smoke-test`: post-deployment validation, shown in the Smoke Tests section.
 - `deployment`: deployment or release pipeline, shown as a supporting pipeline.
 - `image-build`: image creation pipeline, shown as a supporting pipeline.
-- `pr-validation`: pull-request validation, shown in the PR Validation section.
+- `pr-validation`: pull-request validation. It is retained as a configuration
+  role for a future dedicated view, but is not queried or shown on the landing
+  dashboard.
 
 Set `repository` on every pipeline that should contribute to main-branch
 repository health. It must match a repository declared in the same project.
@@ -69,9 +72,11 @@ The dashboard queries the Azure DevOps Build API with `branchName` set to
 `refs/heads/main`, so feature-branch, PR-validation, smoke-test, deployment,
 and image-build runs cannot determine repository health.
 
-`pr-validation` entries also use `repository` to associate validation builds
-with active pull requests. They remain in the PR Validation section and are
-queried using Azure DevOps's `refs/pull/<PR ID>/merge` ref.
+`pr-validation` entries may use `repository` to associate validation builds
+with pull requests in a future dedicated view. When such a view links to a
+pull request, it uses Azure DevOps's browser URL (`_links.web.href`) or builds
+the standard Azure DevOps pull-request page URL; it never links to a REST JSON
+endpoint.
 
 ### Runtime Agent Pools
 
@@ -92,8 +97,8 @@ make check
 
 Tests mock Azure DevOps responses and cover configuration parsing, build/test
 normalisation, main-branch filtering, repository association, health-state
-calculation, PR targeting, runtime pool discovery, independent test-data
-failure handling, and partial API failure isolation.
+calculation, runtime pool discovery, independent test-data failure handling,
+pull-request browser-link construction, and partial API failure isolation.
 
 ## Known Gaps
 

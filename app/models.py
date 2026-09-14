@@ -76,29 +76,3 @@ class RepositoryHealth:
             "health": self.health,
             "latest_run": self.latest_run.as_dict() if self.latest_run else None,
         }
-
-
-@dataclass
-class PullRequestHealth:
-    project: str
-    repository: str
-    pr_id: int
-    title: str
-    source_branch: str
-    target_branch: str
-    url: str | None
-    validations: list[PipelineHealth] = field(default_factory=list)
-    error: str | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "project": self.project,
-            "repository": self.repository,
-            "pr_id": self.pr_id,
-            "title": self.title,
-            "source_branch": self.source_branch,
-            "target_branch": self.target_branch,
-            "url": self.url,
-            "validations": [validation.as_dict() for validation in self.validations],
-            "error": self.error,
-        }

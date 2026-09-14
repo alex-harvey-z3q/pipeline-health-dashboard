@@ -7,10 +7,9 @@ from typing import Any
 
 from app.azdo.builds import execution_pool_name, latest_build
 from app.azdo.client import AzureDevOpsClient, AzureDevOpsError
-from app.azdo.pull_requests import active_pull_requests, validation_branch
 from app.azdo.tests import test_summary
 from app.config import DashboardConfig
-from app.models import PipelineHealth, PipelineSpec, PullRequestHealth, RepositoryHealth, TestSummary
+from app.models import PipelineHealth, PipelineSpec, RepositoryHealth, TestSummary
 
 
 MAIN_BRANCH = "refs/heads/main"
@@ -41,20 +40,6 @@ def pipeline_health(client: AzureDevOpsClient, pipeline: PipelineSpec, branch: s
     except (AzureDevOpsError, KeyError, TypeError, ValueError) as error:
         health.tests = TestSummary(available=False, error=str(error))
     return health
-
-
-def _collect_pr(client: AzureDevOpsClient, project: str, repository: str, pipeline_specs: tuple[PipelineSpec, ...]) -> list[PullRequestHealth]:
-    try:
-        pull_requests = active_pull_requests(client, project, repository)
-    except AzureDevOpsError as error:
-        return [PullRequestHealth(project, repository, 0, "Unable to query pull requests", "", "", None, error=str(error))]
-
-    items: list[PullRequestHealth] = []
-    for pr in pull_requests:
-        pr_id = int(pr["pullRequestId"])
-        validations = [pipeline_health(client, pipeline, validation_branch(pr_id)) for pipeline in pipeline_specs]
-        items.append(PullRequestHealth(project, repository, pr_id, pr.get("title", "Untitled pull request"), pr.get("sourceRefName", ""), pr.get("targetRefName", ""), pr.get("url"), validations))
-    return items
 
 
 def repository_health_state(run: PipelineHealth | None) -> str:
@@ -121,34 +106,6 @@ def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dic
             executor.map(lambda pipeline: pipeline_health(client, pipeline), supporting_pipeline_specs)
         )
 
-    validation_pipelines_by_repository: dict[tuple[str, str], tuple[PipelineSpec, ...]] = {}
-    for project in config.projects:
-        for repository in project.repositories:
-            pipelines = tuple(
-                pipeline
-                for pipeline in config.pipelines
-                if pipeline.role == "pr-validation"
-                and pipeline.project == project.name
-                and pipeline.repository == repository.name
-            )
-            if pipelines:
-                validation_pipelines_by_repository[(project.name, repository.name)] = pipelines
-
-    pull_request_items: list[PullRequestHealth] = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(validation_pipelines_by_repository))) as executor:
-        futures = [
-            executor.submit(
-                _collect_pr,
-                client,
-                project,
-                repository,
-                pipelines,
-            )
-            for (project, repository), pipelines in validation_pipelines_by_repository.items()
-        ]
-        for future in futures:
-            pull_request_items.extend(future.result())
-
     return {
         "summary": {
             "repositories_monitored": len(repositories),
@@ -160,5 +117,4 @@ def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dic
         "repositories": [item.as_dict() for item in sorted(repositories, key=lambda item: (item.project, item.repository))],
         "smoke_tests": [item.as_dict() for item in sorted(smoke_test_items, key=lambda item: (item.pipeline.project, item.pipeline.name))],
         "supporting_pipelines": [item.as_dict() for item in sorted(supporting_pipeline_items, key=lambda item: (item.pipeline.project, item.pipeline.name))],
-        "pull_requests": [item.as_dict() for item in pull_request_items],
     }

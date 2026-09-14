@@ -18,3 +18,14 @@ def active_pull_requests(client: AzureDevOpsClient, project: str, repository: st
 def validation_branch(pr_id: int) -> str:
     """Azure DevOps PR validation refs explicitly identify the associated PR."""
     return f"refs/pull/{pr_id}/merge"
+
+
+def pull_request_web_url(organization_url: str, project: str, repository: str, pull_request: dict[str, Any]) -> str:
+    """Return an Azure DevOps browser URL, never the REST API URL on the PR payload."""
+    web_url = pull_request.get("_links", {}).get("web", {}).get("href")
+    if web_url:
+        return str(web_url)
+    return (
+        f"{organization_url.rstrip('/')}/{quote(project)}/_git/{quote(repository)}"
+        f"/pullrequest/{int(pull_request['pullRequestId'])}"
+    )
