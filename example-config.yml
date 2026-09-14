@@ -6,20 +6,16 @@ projects:
     repositories:
       - name: agent-infrastructure
     pipelines:
-      - name: "REPLACE: agent main CI"
-        definition_id: 1000
-        role: pipeline
-        repository: agent-infrastructure
       - name: "REPLACE: agent image build"
-        definition_id: 1001
+        definition_id: 1000
         role: image-build
         repository: agent-infrastructure
       - name: "REPLACE: agent deployment"
-        definition_id: 1002
+        definition_id: 1001
         role: deployment
         repository: agent-infrastructure
       - name: "REPLACE: platform smoke tests"
-        definition_id: 1003
+        definition_id: 1002
         role: smoke-test
         repository: agent-infrastructure
 
@@ -28,19 +24,11 @@ projects:
       - name: Examples
       - name: TestConfig
     pipelines:
-      - name: "REPLACE: Examples main CI"
-        definition_id: 2000
-        role: pipeline
-        repository: Examples
-      - name: "REPLACE: TestConfig main CI"
-        definition_id: 2001
-        role: pipeline
-        repository: TestConfig
       - name: "REPLACE: template PR validation"
-        definition_id: 2002
+        definition_id: 2000
         role: pr-validation
         repository: Examples
       - name: "REPLACE: template smoke tests"
-        definition_id: 2003
+        definition_id: 2001
         role: smoke-test
         repository: TestConfig

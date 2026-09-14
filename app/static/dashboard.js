@@ -8,10 +8,12 @@ const link = (url, label) => url ? `<a href="${escapeHtml(url)}" target="_blank"
 function repositoryTable(items) {
   if (!items.length) return "<p class=\"empty\">No configured repositories.</p>";
   const rows = items.map((item) => {
-    const run = item.latest_run;
-    return `<tr><td>${escapeHtml(item.project)}</td><td>${escapeHtml(item.repository)}</td><td>${escapeHtml(item.branch || "Unknown")}</td><td><span class="status ${statusClass(item.health)}">${escapeHtml(item.health)}</span></td><td>${escapeHtml(item.ci_pipeline ? item.ci_pipeline.name : "-")}</td><td>${escapeHtml(item.status_reason || "-")}</td><td>${run ? escapeHtml(run.run_number || "No run") : "-"}</td><td>${run ? escapeHtml(run.started_at || "-") : "-"}</td><td>${run ? escapeHtml(run.completed_at || "-") : "-"}</td><td>${run ? escapeHtml(tests(run)) : "-"}</td><td>${run ? link(run.run_url, "Open run") : "-"}</td></tr>`;
+    const pipelines = item.ci_runs.length
+      ? item.ci_runs.map((run) => `<p>${escapeHtml(run.pipeline.name)}: <span class="status ${statusClass(result(run))}">${escapeHtml(result(run))}</span> ${link(run.run_url, run.run_number || "No run")} | ${escapeHtml(tests(run))}</p>`).join("")
+      : "-";
+    return `<tr><td>${escapeHtml(item.project)}</td><td>${escapeHtml(item.repository)}</td><td>${escapeHtml(item.branch || "Unknown")}</td><td><span class="status ${statusClass(item.health)}">${escapeHtml(item.health)}</span></td><td>${pipelines}</td><td>${escapeHtml(item.status_reason || "-")}</td></tr>`;
   }).join("");
-  return `<table class="table"><thead><tr><th>Project</th><th>Repository</th><th>Default branch</th><th>Health</th><th>CI pipeline</th><th>Status</th><th>Latest run</th><th>Started</th><th>Completed</th><th>Tests</th><th>Azure DevOps</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table class="table"><thead><tr><th>Project</th><th>Repository</th><th>Default branch</th><th>Health</th><th>Default-branch CI pipelines</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderRows(container, items, render) { container.innerHTML = items.length ? items.map(render).join("") : "<p class=\"empty\">No items to show.</p>"; }

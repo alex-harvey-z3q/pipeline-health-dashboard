@@ -11,8 +11,9 @@ import yaml
 from app.models import PipelineSpec, RepositorySpec
 
 
-VALID_ROLES = {"image-build", "deployment", "smoke-test", "pr-validation", "pipeline"}
+VALID_ROLES = {"image-build", "deployment", "smoke-test", "pr-validation"}
 PIPELINE_FIELDS = {"name", "definition_id", "role", "repository"}
+REPOSITORY_FIELDS = {"name", "ci_definition_ids"}
 CONFIGURATION_FIELDS = {"organization_url", "projects"}
 
 
@@ -60,7 +61,22 @@ def load_config(path: Path) -> DashboardConfig:
     pipeline_identities: set[tuple[str, int]] = set()
     for raw_project in raw_projects:
         project_name = str(_required(raw_project, "name", "project"))
-        repositories = tuple(RepositorySpec(name=str(_required(repo, "name", f"project {project_name} repository"))) for repo in raw_project.get("repositories", []))
+        repositories: list[RepositorySpec] = []
+        for raw_repository in raw_project.get("repositories", []):
+            unexpected_fields = set(raw_repository) - REPOSITORY_FIELDS
+            if unexpected_fields:
+                raise ConfigError(
+                    f"repository in {project_name} has unsupported fields: {sorted(unexpected_fields)}."
+                )
+            repository_name = str(_required(raw_repository, "name", f"project {project_name} repository"))
+            raw_definition_ids = raw_repository.get("ci_definition_ids", [])
+            if not isinstance(raw_definition_ids, list):
+                raise ConfigError(f"repository {repository_name!r} ci_definition_ids must be a list.")
+            definition_ids = tuple(int(value) for value in raw_definition_ids)
+            if len(set(definition_ids)) != len(definition_ids):
+                raise ConfigError(f"repository {repository_name!r} has duplicate CI definition IDs.")
+            repositories.append(RepositorySpec(name=repository_name, ci_definition_ids=definition_ids))
+        repositories = tuple(repositories)
         repository_names = {repository.name for repository in repositories}
         projects.append(ProjectConfig(name=project_name, repositories=repositories))
         for raw_pipeline in raw_project.get("pipelines", []):

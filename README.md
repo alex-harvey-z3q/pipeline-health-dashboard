@@ -7,9 +7,10 @@ agents, trigger smoke tests, or change pull requests.
 ## Repo CI Status
 
 - One health record for each configured repository
-- The latest associated build for the repository's Azure DevOps default branch
-- Default-branch run status, start and completion times, test totals, and a link
-  to Azure DevOps
+- All discovered ordinary CI pipelines for the repository's Azure DevOps
+  default branch
+- Each contributing pipeline's latest run status, test totals, and Azure DevOps
+  link
 - The runtime agent pool reported for the selected build
 
 The dashboard reports Azure DevOps and build-runtime state only. It does not
@@ -23,9 +24,11 @@ Repository health is intentionally concise:
 - `Unknown`: Azure DevOps cannot supply a usable CI result.
 
 The dashboard discovers each repository's `defaultBranch` from Azure DevOps;
-it never assumes that the branch is named `main`. It shows distinct status
-messages for no configured CI pipeline, an unknown default branch, no builds
-on the discovered branch, and Azure DevOps query failures.
+it never assumes that the branch is named `main`. It also discovers Build
+Definitions associated with the repository's Azure DevOps repository ID. It
+shows distinct status messages for an unknown default branch, no discovered
+default-branch CI pipeline, no builds on the discovered branch, and Azure
+DevOps query failures.
 
 Smoke tests appear in their own dashboard section. Pull-request validation is
 not queried or shown on the central dashboard, keeping it focused on the
@@ -59,8 +62,6 @@ Copy `example-config.yml` to `config.yml`. Each pipeline requires a display
 name, Azure DevOps definition ID, and a role. The `(project, definition_id)`
 pair is its stable identity.
 
-- `pipeline`: normal repository CI. This is the only role used to determine
-  central repository health on the Azure DevOps default branch.
 - `smoke-test`: post-deployment validation, shown in the Smoke Tests section.
 - `deployment`: deployment or release pipeline, shown as a supporting pipeline.
 - `image-build`: image creation pipeline, shown as a supporting pipeline.
@@ -68,14 +69,32 @@ pair is its stable identity.
   role for a future dedicated view, but is not queried or shown on the landing
   dashboard.
 
-Set `repository` on every pipeline that should contribute to default-branch
-repository health. It must match a repository declared in the same project.
-Each monitored repository needs at least one associated `role: pipeline` entry
-to have meaningful landing-page health; otherwise it is shown as `Unknown`.
-The dashboard queries the Azure DevOps repository API for `defaultBranch`, then
-uses that exact ref as the Build API `branchName`. Feature-branch,
-PR-validation, smoke-test, deployment, and image-build runs cannot determine
-repository health.
+Ordinary repository CI is auto-discovered. The dashboard queries the Azure
+DevOps repository API for `defaultBranch` and repository ID, asks the Build
+Definitions API for definitions associated with that ID, then uses the exact
+default-branch ref as the Build API `branchName`. It does not use pipeline-name
+heuristics.
+
+Pipelines configured with `deployment`, `smoke-test`, `pr-validation`, or
+`image-build` are specialist pipelines. Their definition IDs are excluded from
+Repo CI Status even when they run against the repository's default branch.
+
+A repository can have multiple ordinary CI definitions. Repo CI Status is
+`Healthy` only when all of their latest default-branch runs succeeded; it is
+`Failing` when any failed or was cancelled, and `Running` when none failed and
+at least one is in progress. Each contributing pipeline is shown in the row.
+
+For an ambiguous repository, optionally narrow discovery with
+`ci_definition_ids` on its repository configuration:
+
+```yaml
+repositories:
+  - name: Templates
+    ci_definition_ids: [1234, 5678]
+```
+
+The override selects from definitions Azure DevOps associates with that
+repository; it does not fall back to name matching or unrelated definitions.
 
 `pr-validation` entries may use `repository` to associate validation builds
 with pull requests in a future dedicated view. When such a view links to a
@@ -101,8 +120,9 @@ make check
 ```
 
 Tests mock Azure DevOps responses and cover configuration parsing, build/test
-normalisation, default-branch filtering, repository association, health-state
-calculation, runtime pool discovery, independent test-data failure handling,
+normalisation, default-branch filtering, repository-ID definition discovery,
+specialist-pipeline exclusion, aggregate health calculation, runtime pool
+discovery, independent test-data failure handling,
 pull-request browser-link construction, and partial API failure isolation.
 
 ## Known Gaps

@@ -27,6 +27,22 @@ projects:
         self.assertEqual(config.pipelines[0].definition_id, 12)
         self.assertEqual(config.pipelines[0].repository, "agents")
 
+    def test_loads_optional_repository_ci_definition_override(self):
+        content = """
+organization_url: https://dev.azure.com/example
+projects:
+  - name: Platform
+    repositories:
+      - name: agents
+        ci_definition_ids: [12, 13]
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yml"
+            path.write_text(content)
+            config = load_config(path)
+
+        self.assertEqual(config.projects[0].repositories[0].ci_definition_ids, (12, 13))
+
     def test_rejects_pipeline_repository_not_declared_by_its_project(self):
         content = """
 organization_url: https://dev.azure.com/example
@@ -95,6 +111,25 @@ projects:
             path = Path(directory) / "config.yml"
             path.write_text(content)
             with self.assertRaises(ConfigError):
+                load_config(path)
+
+    def test_rejects_legacy_normal_ci_pipeline_role(self):
+        content = """
+organization_url: https://dev.azure.com/example
+projects:
+  - name: Platform
+    repositories:
+      - name: agents
+    pipelines:
+      - name: Legacy CI
+        definition_id: 1
+        role: pipeline
+        repository: agents
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yml"
+            path.write_text(content)
+            with self.assertRaisesRegex(ConfigError, "invalid role 'pipeline'"):
                 load_config(path)
 
     def test_pipeline_identity_is_project_and_definition_id(self):

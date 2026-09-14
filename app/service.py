@@ -7,6 +7,7 @@ from typing import Any
 
 from app.azdo.builds import execution_pool_name, latest_build
 from app.azdo.client import AzureDevOpsClient, AzureDevOpsError
+from app.azdo.definitions import repository_build_definitions
 from app.azdo.repositories import get_repository
 from app.azdo.tests import test_summary
 from app.config import DashboardConfig
@@ -50,19 +51,39 @@ def repository_health_state(run: PipelineHealth | None) -> str:
     return "unknown"
 
 
-def _most_recent_run(runs: list[PipelineHealth]) -> PipelineHealth | None:
-    if not runs:
+def _definition_pipeline(project: str, repository: str, definition: dict[str, Any]) -> PipelineSpec | None:
+    try:
+        definition_id = int(definition["id"])
+    except (KeyError, TypeError, ValueError):
         return None
-    return max(runs, key=lambda run: (run.completed_at or run.started_at or "", run.run_id or 0))
+    return PipelineSpec(
+        project=project,
+        name=str(definition.get("name") or f"Build definition {definition_id}"),
+        definition_id=definition_id,
+        role="pipeline",
+        repository=repository,
+    )
+
+
+def _aggregate_repository_health(runs: list[PipelineHealth]) -> str:
+    states = [repository_health_state(run) for run in runs]
+    if "failing" in states:
+        return "failing"
+    if "running" in states:
+        return "running"
+    if "unknown" in states:
+        return "unknown"
+    return "healthy"
 
 
 def repository_health(
     client: AzureDevOpsClient,
     project: str,
-    repository: str,
-    ci_pipelines: tuple[PipelineSpec, ...],
+    repository_spec: Any,
+    specialist_definition_ids: frozenset[int],
 ) -> RepositoryHealth:
     """Collect CI health for one repository's Azure DevOps default branch."""
+    repository = repository_spec.name
     try:
         metadata = get_repository(client, project, repository)
     except AzureDevOpsError as error:
@@ -71,7 +92,6 @@ def repository_health(
             repository=repository,
             status_reason="Unable to query Azure DevOps",
             error=str(error),
-            ci_pipeline=ci_pipelines[0] if ci_pipelines else None,
         )
 
     default_branch = metadata.get("defaultBranch")
@@ -80,62 +100,89 @@ def repository_health(
             project=project,
             repository=repository,
             status_reason="Default branch unknown",
-            ci_pipeline=ci_pipelines[0] if ci_pipelines else None,
         )
 
-    if not ci_pipelines:
-        return RepositoryHealth(
-            project=project,
-            repository=repository,
-            default_branch=default_branch,
-            status_reason="No CI pipeline configured",
-        )
-
-    runs = [pipeline_health(client, pipeline, default_branch) for pipeline in ci_pipelines]
-    successful_queries = [run for run in runs if run.run_id is not None]
-    latest_run = _most_recent_run(successful_queries)
-    if latest_run:
-        return RepositoryHealth(
-            project=project,
-            repository=repository,
-            default_branch=default_branch,
-            health=repository_health_state(latest_run),
-            ci_pipeline=latest_run.pipeline,
-            latest_run=latest_run,
-        )
-
-    failed_query = next((run for run in runs if run.status == "error"), None)
-    if failed_query:
+    repository_id = metadata.get("id")
+    if not isinstance(repository_id, str) or not repository_id.strip():
         return RepositoryHealth(
             project=project,
             repository=repository,
             default_branch=default_branch,
             status_reason="Unable to query Azure DevOps",
-            error=failed_query.error,
-            ci_pipeline=failed_query.pipeline,
+            error="Azure DevOps did not provide a repository ID for CI discovery.",
         )
+
+    try:
+        definitions = repository_build_definitions(client, project, repository_id)
+    except AzureDevOpsError as error:
+        return RepositoryHealth(
+            project=project,
+            repository=repository,
+            default_branch=default_branch,
+            status_reason="Unable to query Azure DevOps",
+            error=str(error),
+        )
+
+    candidates = [
+        pipeline
+        for definition in definitions
+        if (pipeline := _definition_pipeline(project, repository, definition)) is not None
+        and pipeline.definition_id not in specialist_definition_ids
+    ]
+    if repository_spec.ci_definition_ids:
+        selected_ids = set(repository_spec.ci_definition_ids)
+        candidates = [pipeline for pipeline in candidates if pipeline.definition_id in selected_ids]
+
+    if not candidates:
+        return RepositoryHealth(
+            project=project,
+            repository=repository,
+            default_branch=default_branch,
+            status_reason="No default-branch CI pipeline discovered",
+        )
+
+    runs = [pipeline_health(client, pipeline, default_branch) for pipeline in candidates]
+    errors = [run.error for run in runs if run.error]
+    actual_runs = [run for run in runs if run.run_id is not None]
+    if not actual_runs:
+        if errors:
+            return RepositoryHealth(
+                project=project,
+                repository=repository,
+                default_branch=default_branch,
+                status_reason="Unable to query Azure DevOps",
+                error="; ".join(errors),
+                ci_runs=runs,
+            )
+        return RepositoryHealth(
+            project=project,
+            repository=repository,
+            default_branch=default_branch,
+            status_reason=f"No builds found on {default_branch.removeprefix('refs/heads/')}",
+            ci_runs=runs,
+        )
+
+    aggregate_state = _aggregate_repository_health(runs)
     return RepositoryHealth(
         project=project,
         repository=repository,
         default_branch=default_branch,
-        status_reason=f"No builds found on {default_branch.removeprefix('refs/heads/')}",
-        ci_pipeline=ci_pipelines[0],
+        health=aggregate_state,
+        status_reason="Unable to query Azure DevOps" if errors and aggregate_state == "unknown" else None,
+        error="; ".join(errors) if errors and aggregate_state == "unknown" else None,
+        ci_runs=runs,
     )
 
 
 def collect_dashboard(config: DashboardConfig, client: AzureDevOpsClient) -> dict[str, Any]:
-    repository_targets = [
-        (
-            project.name,
-            repository.name,
-            tuple(
-                pipeline
-                for pipeline in config.pipelines
-                if pipeline.role == "pipeline"
-                and pipeline.project == project.name
-                and pipeline.repository == repository.name
-            ),
+    specialist_definition_ids_by_project = {
+        project.name: frozenset(
+            pipeline.definition_id for pipeline in config.pipelines if pipeline.project == project.name
         )
+        for project in config.projects
+    }
+    repository_targets = [
+        (project.name, repository, specialist_definition_ids_by_project[project.name])
         for project in config.projects
         for repository in project.repositories
     ]

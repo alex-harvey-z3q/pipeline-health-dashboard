@@ -18,6 +18,7 @@ class PipelineSpec:
 @dataclass(frozen=True)
 class RepositorySpec:
     name: str
+    ci_definition_ids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -68,8 +69,7 @@ class RepositoryHealth:
     health: str = "unknown"
     status_reason: str | None = None
     error: str | None = None
-    ci_pipeline: PipelineSpec | None = None
-    latest_run: PipelineHealth | None = None
+    ci_runs: list[PipelineHealth] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -80,6 +80,5 @@ class RepositoryHealth:
             "health": self.health,
             "status_reason": self.status_reason,
             "error": self.error,
-            "ci_pipeline": asdict(self.ci_pipeline) if self.ci_pipeline else None,
-            "latest_run": self.latest_run.as_dict() if self.latest_run else None,
+            "ci_runs": [run.as_dict() for run in self.ci_runs],
         }
