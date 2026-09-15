@@ -9,7 +9,7 @@ from typing import Any
 from app.azdo.builds import execution_pool_name, latest_build
 from app.azdo.client import AzureDevOpsClient, AzureDevOpsError
 from app.azdo.definitions import repository_build_definitions
-from app.azdo.pull_requests import active_pull_requests, pull_request_changed_paths, pull_request_web_url
+from app.azdo.pull_requests import active_pull_requests, pull_request_changed_paths, pull_request_web_url, validation_branch
 from app.azdo.repositories import get_repository
 from app.azdo.tests import test_summary
 from app.config import DashboardConfig
@@ -117,11 +117,25 @@ def _affected_template_areas(changed_paths: set[str], path_prefixes: tuple[str, 
     return affected_areas, matched_paths
 
 
+def reusable_template_pr_validation_state(validation_runs: list[PipelineHealth]) -> str:
+    """Summarise configured PR-validation pipelines without inferring missing runs."""
+    actual_runs = [run for run in validation_runs if run.run_id is not None]
+    states = [repository_health_state(run) for run in actual_runs]
+    if "failing" in states:
+        return "failing"
+    if "running" in states:
+        return "running"
+    if not actual_runs or any(run.error or run.run_id is None for run in validation_runs):
+        return "unknown"
+    return "passed" if all(state == "healthy" for state in states) else "unknown"
+
+
 def _reusable_template_prs_for_repository(
     client: AzureDevOpsClient,
     project: str,
     repository: str,
     config: ReusableTemplatePRConfig,
+    validation_pipelines: tuple[PipelineSpec, ...],
     now: datetime,
 ) -> list[ReusableTemplatePR]:
     try:
@@ -145,6 +159,9 @@ def _reusable_template_prs_for_repository(
         affected_areas, matched_paths = _affected_template_areas(changed_paths, config.path_prefixes)
         if not matched_paths:
             continue
+        validation_runs = [
+            pipeline_health(client, pipeline, validation_branch(pr_id)) for pipeline in validation_pipelines
+        ]
         created_at = pull_request.get("creationDate")
         age_days = _pull_request_age_days(created_at, now)
         created_by = pull_request.get("createdBy")
@@ -167,6 +184,8 @@ def _reusable_template_prs_for_repository(
                     if isinstance(created_by, dict)
                     else None
                 ),
+                validation_status=reusable_template_pr_validation_state(validation_runs),
+                validation_runs=validation_runs,
             )
         )
     return sorted(matching_prs, key=lambda pr: pr.created_at or "", reverse=True)
@@ -179,8 +198,23 @@ def collect_reusable_template_prs(
 ) -> list[ReusableTemplatePR]:
     """Collect active PRs that modify configured reusable template paths."""
     current_time = now or datetime.now(timezone.utc)
+    validation_pipelines_by_repository: dict[tuple[str, str], tuple[PipelineSpec, ...]] = {}
+    for project in config.projects:
+        for repository in project.repositories:
+            validation_pipelines_by_repository[(project.name, repository.name)] = tuple(
+                pipeline
+                for pipeline in config.pipelines
+                if pipeline.project == project.name
+                and pipeline.repository == repository.name
+                and pipeline.role == "pr-validation"
+            )
     targets = [
-        (project.name, repository.name, repository.reusable_template_prs)
+        (
+            project.name,
+            repository.name,
+            repository.reusable_template_prs,
+            validation_pipelines_by_repository[(project.name, repository.name)],
+        )
         for project in config.projects
         for repository in project.repositories
         if repository.reusable_template_prs and repository.reusable_template_prs.enabled
@@ -188,8 +222,16 @@ def collect_reusable_template_prs(
     matching_prs: list[ReusableTemplatePR] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(targets))) as executor:
         futures = [
-            executor.submit(_reusable_template_prs_for_repository, client, project, repository, template_config, current_time)
-            for project, repository, template_config in targets
+            executor.submit(
+                _reusable_template_prs_for_repository,
+                client,
+                project,
+                repository,
+                template_config,
+                validation_pipelines,
+                current_time,
+            )
+            for project, repository, template_config, validation_pipelines in targets
         ]
         for future in futures:
             matching_prs.extend(future.result())

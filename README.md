@@ -71,8 +71,16 @@ card.
 PR age is the number of completed 24-hour periods since Azure DevOps recorded
 its creation time. A PR is `Fresh` at or below `max_age_days`, and `Stale` when
 it exceeds that threshold. The PR link always opens the Azure DevOps web UI.
-Validation status is intentionally not shown here because the dashboard does
-not currently have a reliable automatic PR-to-validation-run association.
+
+When the repository has configured `pr-validation` pipelines, the dashboard
+also shows their CI status for every matching template PR. Each validation is
+queried with Azure DevOps's explicit PR merge ref,
+`refs/pull/<PR ID>/merge`; it is not correlated by timing. Multiple configured
+validation pipelines are shown and aggregated: `Failing` when any validation
+failed or was cancelled, `Running` when none failed and one is active, `Passed`
+when every configured validation succeeded, and `Unknown` when Azure DevOps has
+no matching run or cannot provide a complete result. Test totals come from the
+Azure DevOps Test API for each validation build when available.
 
 ## Local Run
 
@@ -96,6 +104,10 @@ backend and is never delivered to the browser.
 The PAT needs Build read, Code read, and Test read scope, with access to every
 configured project.
 
+If a browser closes or refreshes while the API response is being written, the
+server treats that client disconnect as harmless. It does not emit a misleading
+`502`; only dashboard collection failures return that response.
+
 ## Configuration
 
 Copy `example-config.yml` to `config.yml`. Each pipeline requires a display
@@ -105,9 +117,9 @@ pair is its stable identity.
 - `smoke-test`: post-deployment validation, shown in the Smoke Tests section.
 - `deployment`: deployment or release pipeline, shown as a supporting pipeline.
 - `image-build`: image creation pipeline, shown as a supporting pipeline.
-- `pr-validation`: pull-request validation. It is retained as a configuration
-  role for a future dedicated view, but is not queried or shown on the landing
-  dashboard.
+- `pr-validation`: pull-request validation for repositories using reusable-
+  template PR tracking. The dashboard queries it against
+  `refs/pull/<PR ID>/merge` and shows it in that secondary operational section.
 
 Ordinary repository CI is auto-discovered. The dashboard queries the Azure
 DevOps repository API for `defaultBranch` and repository ID, asks the Build
@@ -136,11 +148,11 @@ repositories:
 The override selects from definitions Azure DevOps associates with that
 repository; it does not fall back to name matching or unrelated definitions.
 
-`pr-validation` entries may use `repository` to associate validation builds
-with pull requests in a future dedicated view. When such a view links to a
-pull request, it uses Azure DevOps's browser URL (`_links.web.href`) or builds
-the standard Azure DevOps pull-request page URL; it never links to a REST JSON
-endpoint.
+`pr-validation` entries must use `repository` to associate validation builds
+with reusable-template PRs. The dashboard queries each matching pipeline using
+the PR's Azure DevOps merge ref. Pull-request links use Azure DevOps's browser
+URL (`_links.web.href`) or the standard Azure DevOps pull-request page URL; the
+dashboard never links to a REST JSON endpoint.
 
 ### Runtime Agent Pools
 

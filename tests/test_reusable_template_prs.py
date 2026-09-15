@@ -1,9 +1,10 @@
 import unittest
+import urllib.parse
 from datetime import datetime, timezone
 
 from app.azdo.client import AzureDevOpsError
 from app.config import DashboardConfig, ProjectConfig
-from app.models import RepositorySpec, ReusableTemplatePRConfig
+from app.models import PipelineSpec, RepositorySpec, ReusableTemplatePRConfig
 from app.service import collect_dashboard, collect_reusable_template_prs
 
 
@@ -13,10 +14,12 @@ NOW = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
 class TemplatePrClient:
     organization_url = "https://dev.azure.com/example"
 
-    def __init__(self, pull_requests=(), changed_paths=None, failing_pr_ids=()):
+    def __init__(self, pull_requests=(), changed_paths=None, failing_pr_ids=(), builds=None, failing_definition_ids=()):
         self.pull_requests = list(pull_requests)
         self.changed_paths = changed_paths or {}
         self.failing_pr_ids = set(failing_pr_ids)
+        self.builds = builds or {}
+        self.failing_definition_ids = set(failing_definition_ids)
         self.paths: list[str] = []
 
     def get(self, path):
@@ -25,6 +28,15 @@ class TemplatePrClient:
             return {"id": "templates-id", "defaultBranch": "refs/heads/main"}
         if "/_apis/build/definitions?" in path:
             return {"value": []}
+        if "/_apis/build/builds?" in path:
+            query = urllib.parse.parse_qs(path.partition("?")[2])
+            definition_id = int(query["definitions"][0])
+            if definition_id in self.failing_definition_ids:
+                raise AzureDevOpsError(f"Build lookup unavailable for {definition_id}")
+            key = (definition_id, query.get("branchName", [None])[0])
+            return {"value": self.builds.get(key, [])}
+        if "/_apis/test/runs?" in path:
+            return {"value": [{"totalTests": 148, "passedTests": 148, "failedTests": 0}]}
         if "/pullrequests?" in path:
             return {"value": self.pull_requests}
         if "/iterations?" in path:
@@ -57,12 +69,35 @@ def template_config(enabled=True, max_age_days=14, path_prefixes=("/pipelines/te
     )
 
 
-def dashboard_config(repository):
+def dashboard_config(repository, pipelines=()):
     return DashboardConfig(
         "https://dev.azure.com/example",
         (ProjectConfig("Pipeline Templates", (repository,)),),
-        (),
+        tuple(pipelines),
     )
+
+
+def validation_pipeline(definition_id, name=None):
+    return PipelineSpec(
+        "Pipeline Templates",
+        name or f"Validation {definition_id}",
+        definition_id,
+        "pr-validation",
+        "Templates",
+    )
+
+
+def validation_build(identifier, *, status="completed", result="succeeded"):
+    return {
+        "id": identifier,
+        "uri": f"vstfs:///Build/Build/{identifier}",
+        "buildNumber": str(identifier),
+        "status": status,
+        "result": result,
+        "startTime": "2026-09-14T00:00:00Z",
+        "finishTime": "2026-09-14T00:01:00Z",
+        "_links": {"web": {"href": f"https://dev.azure.com/example/build/{identifier}"}},
+    }
 
 
 class ReusableTemplatePrTests(unittest.TestCase):
@@ -201,6 +236,84 @@ class ReusableTemplatePrTests(unittest.TestCase):
 
         self.assertEqual([item.pr_id for item in items], [2])
 
+    def test_validation_uses_configured_pipeline_and_pr_merge_ref(self):
+        pipeline = validation_pipeline(3892, "templates.pr.validate")
+        client = TemplatePrClient(
+            [pull_request(1)],
+            {1: ["/pipelines/templates/docker/build.yml"]},
+            builds={(3892, "refs/pull/1/merge"): [validation_build(101)]},
+        )
+
+        item = collect_reusable_template_prs(
+            dashboard_config(RepositorySpec("Templates", reusable_template_prs=template_config()), (pipeline,)),
+            client,
+            NOW,
+        )[0]
+
+        self.assertEqual(item.validation_status, "passed")
+        self.assertEqual(len(item.validation_runs), 1)
+        self.assertEqual(item.validation_runs[0].pipeline.name, "templates.pr.validate")
+        self.assertEqual(item.validation_runs[0].run_id, 101)
+        self.assertEqual(item.validation_runs[0].tests.total, 148)
+        self.assertEqual(item.validation_runs[0].run_url, "https://dev.azure.com/example/build/101")
+        self.assertTrue(any("definitions=3892" in path and "branchName=refs%2Fpull%2F1%2Fmerge" in path for path in client.paths))
+
+    def test_multiple_validation_pipelines_aggregate_failed_and_running_states(self):
+        pipelines = (validation_pipeline(1), validation_pipeline(2))
+        cases = (
+            ({(1, "refs/pull/1/merge"): [validation_build(101)], (2, "refs/pull/1/merge"): [validation_build(102, result="canceled")]}, "failing"),
+            ({(1, "refs/pull/1/merge"): [validation_build(101)], (2, "refs/pull/1/merge"): [validation_build(102, status="inProgress", result=None)]}, "running"),
+        )
+        for builds, expected_status in cases:
+            with self.subTest(expected_status=expected_status):
+                client = TemplatePrClient(
+                    [pull_request(1)],
+                    {1: ["/pipelines/templates/docker/build.yml"]},
+                    builds=builds,
+                )
+                item = collect_reusable_template_prs(
+                    dashboard_config(RepositorySpec("Templates", reusable_template_prs=template_config()), pipelines),
+                    client,
+                    NOW,
+                )[0]
+
+                self.assertEqual(item.validation_status, expected_status)
+                self.assertEqual(len(item.validation_runs), 2)
+
+    def test_validation_is_unknown_when_no_matching_build_exists(self):
+        client = TemplatePrClient([pull_request(1)], {1: ["/pipelines/templates/docker/build.yml"]})
+
+        item = collect_reusable_template_prs(
+            dashboard_config(
+                RepositorySpec("Templates", reusable_template_prs=template_config()),
+                (validation_pipeline(3892),),
+            ),
+            client,
+            NOW,
+        )[0]
+
+        self.assertEqual(item.validation_status, "unknown")
+        self.assertIsNone(item.validation_runs[0].run_id)
+
+    def test_one_validation_lookup_failure_does_not_hide_other_validation_runs(self):
+        pipelines = (validation_pipeline(1), validation_pipeline(2))
+        client = TemplatePrClient(
+            [pull_request(1)],
+            {1: ["/pipelines/templates/docker/build.yml"]},
+            builds={(2, "refs/pull/1/merge"): [validation_build(102)]},
+            failing_definition_ids={1},
+        )
+
+        item = collect_reusable_template_prs(
+            dashboard_config(RepositorySpec("Templates", reusable_template_prs=template_config()), pipelines),
+            client,
+            NOW,
+        )[0]
+
+        self.assertEqual(item.validation_status, "unknown")
+        self.assertEqual([run.run_id for run in item.validation_runs], [None, 102])
+        self.assertIn("Build lookup unavailable", item.validation_runs[0].error)
+
     def test_dashboard_response_has_dedicated_reusable_template_pr_field(self):
         client = TemplatePrClient([pull_request(1)], {1: ["/pipelines/templates/build.yml"]})
 
@@ -209,3 +322,4 @@ class ReusableTemplatePrTests(unittest.TestCase):
         )
 
         self.assertEqual([item["pr_id"] for item in dashboard["reusable_template_prs"]], [1])
+        self.assertEqual(dashboard["reusable_template_prs"][0]["validation_status"], "unknown")

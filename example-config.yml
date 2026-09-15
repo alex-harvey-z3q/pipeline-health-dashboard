@@ -33,7 +33,7 @@ projects:
       - name: "REPLACE: template PR validation"
         definition_id: 2000
         role: pr-validation
-        repository: Examples
+        repository: Templates
       - name: "REPLACE: template smoke tests"
         definition_id: 2001
         role: smoke-test

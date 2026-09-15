@@ -107,6 +107,8 @@ class ReusableTemplatePR:
     matched_paths: list[str]
     web_url: str
     author: str | None = None
+    validation_status: str = "unknown"
+    validation_runs: list[PipelineHealth] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -123,4 +125,6 @@ class ReusableTemplatePR:
             "matched_paths": self.matched_paths,
             "web_url": self.web_url,
             "author": self.author,
+            "validation_status": self.validation_status,
+            "validation_runs": [run.as_dict() for run in self.validation_runs],
         }

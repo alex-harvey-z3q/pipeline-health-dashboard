@@ -24,7 +24,10 @@ function reusableTemplatePrs(items) {
     const areas = pr.affected_areas.join(", ");
     const age = pr.age_days === null ? "Unknown age" : `${pr.age_days} day${pr.age_days === 1 ? "" : "s"}`;
     const freshness = pr.stale === null ? "Unknown" : pr.stale ? "Stale" : "Fresh";
-    return `<article class="row"><h3>PR ${escapeHtml(pr.pr_id)}: ${escapeHtml(pr.title)} <span class="status ${pr.stale ? "stale" : pr.stale === false ? "fresh" : "unknown"}">${freshness}</span></h3><p>${escapeHtml(pr.project)} / ${escapeHtml(pr.repository)} | ${escapeHtml(pr.source_branch)} to ${escapeHtml(pr.target_branch)} | ${link(pr.web_url, "Open PR")}</p><p>Created: ${escapeHtml(pr.created_at || "Unknown")} | Age: ${escapeHtml(age)}${pr.author ? ` | Author: ${escapeHtml(pr.author)}` : ""}</p><p>Template areas: ${escapeHtml(areas)}</p></article>`;
+    const validationRuns = pr.validation_runs.length
+      ? pr.validation_runs.map((run) => `${escapeHtml(run.pipeline.name)}: <span class="status ${statusClass(result(run))}">${escapeHtml(result(run))}</span> ${link(run.run_url, run.run_number || "No run")} | ${escapeHtml(tests(run))}`).join("<br>")
+      : "No validation run found";
+    return `<article class="row"><h3>PR ${escapeHtml(pr.pr_id)}: ${escapeHtml(pr.title)} <span class="status ${pr.stale ? "stale" : pr.stale === false ? "fresh" : "unknown"}">${freshness}</span></h3><p>${escapeHtml(pr.project)} / ${escapeHtml(pr.repository)} | ${escapeHtml(pr.source_branch)} to ${escapeHtml(pr.target_branch)} | ${link(pr.web_url, "Open PR")}</p><p>Created: ${escapeHtml(pr.created_at || "Unknown")} | Age: ${escapeHtml(age)}${pr.author ? ` | Author: ${escapeHtml(pr.author)}` : ""}</p><p>Template areas: ${escapeHtml(areas)}</p><p>Validation: <span class="status ${statusClass(pr.validation_status)}">${escapeHtml(pr.validation_status)}</span><br>${validationRuns}</p></article>`;
   }).join("");
 }
 
@@ -37,10 +40,13 @@ function render(data) {
   renderRows($("#supporting-pipeline-list"), data.supporting_pipelines, (item) => `<article class="row"><h3>${escapeHtml(item.pipeline.project)} / ${escapeHtml(item.pipeline.name)} <span class="status ${statusClass(result(item))}">${escapeHtml(result(item))}</span></h3><p>Role: ${escapeHtml(item.pipeline.role)} | Run: ${link(item.run_url, item.run_number || "No run")} | Tests: ${escapeHtml(tests(item))} | Agent pool: ${escapeHtml(item.agent_pool || "Unknown")}</p></article>`);
 }
 
+let refreshInFlight = false;
 async function refresh() {
+  if (refreshInFlight) return;
+  refreshInFlight = true;
   $("#refresh").disabled = true; $("#error").hidden = true;
   try { const response = await fetch("/api/dashboard", {cache: "no-store"}); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Dashboard request failed."); render(data); $("#updated").textContent = `Updated ${new Date().toLocaleTimeString()}`; }
   catch (error) { $("#error").textContent = error.message; $("#error").hidden = false; }
-  finally { $("#refresh").disabled = false; }
+  finally { $("#refresh").disabled = false; refreshInFlight = false; }
 }
 $("#refresh").addEventListener("click", refresh); refresh(); setInterval(refresh, 60000);

@@ -37,9 +37,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def _dashboard(self) -> None:
         try:
             client = AzureDevOpsClient(self.config.organization_url, token_provider_from_environment())
-            self._send_json(HTTPStatus.OK, collect_dashboard(self.config, client))
+            payload = collect_dashboard(self.config, client)
         except Exception as error:
-            self._send_json(HTTPStatus.BAD_GATEWAY, {"error": str(error)})
+            try:
+                self._send_json(HTTPStatus.BAD_GATEWAY, {"error": str(error)})
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                pass
+            return
+        try:
+            self._send_json(HTTPStatus.OK, payload)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
 
     def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
         body = json.dumps(payload).encode("utf-8")
