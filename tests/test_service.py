@@ -78,7 +78,10 @@ class ServiceTests(unittest.TestCase):
         collect_dashboard(config_for([RepositorySpec("repository")]), client)
 
         definition_path = next(path for path in client.paths if "/_apis/build/definitions?" in path)
-        self.assertIn("repositoryId=repo-guid", definition_path)
+        query = urllib.parse.parse_qs(definition_path.partition("?")[2])
+        self.assertEqual(query["repositoryId"], ["repo-guid"])
+        self.assertEqual(query["repositoryType"], ["TfsGit"])
+        self.assertEqual(query["api-version"], ["7.1"])
 
     def test_no_discovered_ci_definition_is_explicit(self):
         dashboard = collect_dashboard(config_for([RepositorySpec("repository")]), DiscoveryClient())

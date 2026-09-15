@@ -15,6 +15,8 @@ def repository_build_definitions(
     repository_id: str,
 ) -> list[dict[str, Any]]:
     """Return build definitions Azure DevOps associates with a repository ID."""
-    query = urllib.parse.urlencode({"repositoryId": repository_id, "api-version": "7.1"})
+    query = urllib.parse.urlencode(
+        {"repositoryId": repository_id, "repositoryType": "TfsGit", "api-version": "7.1"}
+    )
     response = client.get(f"/{quote(project)}/_apis/build/definitions?{query}")
     return response.get("value", [])

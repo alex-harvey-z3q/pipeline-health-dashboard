@@ -125,7 +125,8 @@ Ordinary repository CI is auto-discovered. The dashboard queries the Azure
 DevOps repository API for `defaultBranch` and repository ID, asks the Build
 Definitions API for definitions associated with that ID, then uses the exact
 default-branch ref as the Build API `branchName`. It does not use pipeline-name
-heuristics.
+heuristics. Azure Repos Git definition discovery supplies
+`repositoryType=TfsGit` alongside the repository ID.
 
 Pipelines configured with `deployment`, `smoke-test`, `pr-validation`, or
 `image-build` are specialist pipelines. Their definition IDs are excluded from
