@@ -23,16 +23,10 @@ class RepositorySpec:
 
 
 @dataclass(frozen=True)
-class ReusableTemplate:
-    path: str
-    name: str | None = None
-
-
-@dataclass(frozen=True)
 class ReusableTemplatePRConfig:
     enabled: bool = False
     max_age_days: int = 14
-    templates: tuple[ReusableTemplate, ...] = ()
+    path_prefixes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -109,7 +103,8 @@ class ReusableTemplatePR:
     created_at: str | None
     age_days: int | None
     stale: bool | None
-    affected_templates: list[ReusableTemplate]
+    affected_areas: list[str]
+    matched_paths: list[str]
     web_url: str
     author: str | None = None
 
@@ -124,7 +119,8 @@ class ReusableTemplatePR:
             "created_at": self.created_at,
             "age_days": self.age_days,
             "stale": self.stale,
-            "affected_templates": [asdict(template) for template in self.affected_templates],
+            "affected_areas": self.affected_areas,
+            "matched_paths": self.matched_paths,
             "web_url": self.web_url,
             "author": self.author,
         }

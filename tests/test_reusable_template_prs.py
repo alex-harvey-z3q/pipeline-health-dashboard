@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from app.azdo.client import AzureDevOpsError
 from app.config import DashboardConfig, ProjectConfig
-from app.models import RepositorySpec, ReusableTemplate, ReusableTemplatePRConfig
+from app.models import RepositorySpec, ReusableTemplatePRConfig
 from app.service import collect_dashboard, collect_reusable_template_prs
 
 
@@ -49,14 +49,11 @@ def pull_request(pr_id, *, target="refs/heads/main", created_at="2026-09-12T12:0
     }
 
 
-def template_config(enabled=True, max_age_days=14):
+def template_config(enabled=True, max_age_days=14, path_prefixes=("/pipelines/templates/",)):
     return ReusableTemplatePRConfig(
         enabled=enabled,
         max_age_days=max_age_days,
-        templates=(
-            ReusableTemplate("/templates/build.yml", "Build Template"),
-            ReusableTemplate("/templates/deploy.yml", "Deploy Template"),
-        ),
+        path_prefixes=path_prefixes,
     )
 
 
@@ -84,7 +81,7 @@ class ReusableTemplatePrTests(unittest.TestCase):
         self.assertEqual(items, [])
         self.assertEqual(client.paths, [])
 
-    def test_only_active_prs_targeting_default_branch_and_exact_paths_are_included(self):
+    def test_only_active_prs_targeting_default_branch_and_matching_prefixes_are_included(self):
         client = TemplatePrClient(
             [
                 pull_request(1),
@@ -93,8 +90,8 @@ class ReusableTemplatePrTests(unittest.TestCase):
                 pull_request(4),
             ],
             {
-                1: ["/templates/build.yml"],
-                3: ["/templates/build.yml.backup"],
+                1: ["/pipelines/templates/docker/build.yml"],
+                3: ["/pipelines/templates-old/build.yml"],
                 4: ["/docs/readme.md"],
             },
         )
@@ -104,18 +101,63 @@ class ReusableTemplatePrTests(unittest.TestCase):
         )
 
         self.assertEqual([item.pr_id for item in items], [1])
-        self.assertEqual([template.name for template in items[0].affected_templates], ["Build Template"])
+        self.assertEqual(items[0].affected_areas, ["docker/"])
+        self.assertEqual(items[0].matched_paths, ["/pipelines/templates/docker/build.yml"])
         self.assertEqual(sum("/pullrequests?" in path for path in client.paths), 1)
         self.assertFalse(any("/pullRequests/2/iterations" in path for path in client.paths))
 
-    def test_multiple_changed_templates_are_reported(self):
-        client = TemplatePrClient([pull_request(1)], {1: ["/templates/build.yml", "/templates/deploy.yml"]})
+    def test_multiple_changed_paths_report_affected_areas_once_each(self):
+        client = TemplatePrClient(
+            [pull_request(1)],
+            {
+                1: [
+                    "/pipelines/templates/docker/build.yml",
+                    "/pipelines/templates/docker/publish.yml",
+                    "/pipelines/templates/containers/deploy.yml",
+                    "/pipelines/templates/steps-webApp-deploy.yml",
+                ]
+            },
+        )
 
         items = collect_reusable_template_prs(
             dashboard_config(RepositorySpec("Templates", reusable_template_prs=template_config())), client, NOW
         )
 
-        self.assertEqual([template.path for template in items[0].affected_templates], ["/templates/build.yml", "/templates/deploy.yml"])
+        self.assertEqual(items[0].affected_areas, ["containers/", "docker/", "steps-webApp-deploy.yml"])
+        self.assertEqual(
+            items[0].matched_paths,
+            [
+                "/pipelines/templates/containers/deploy.yml",
+                "/pipelines/templates/docker/build.yml",
+                "/pipelines/templates/docker/publish.yml",
+                "/pipelines/templates/steps-webApp-deploy.yml",
+            ],
+        )
+
+    def test_multiple_prefixes_and_a_path_without_a_leading_slash_match(self):
+        client = TemplatePrClient(
+            [pull_request(1)],
+            {1: ["pipelines/templates/docker/build.yml", "/shared/workflows/validation/check.yml"]},
+        )
+
+        items = collect_reusable_template_prs(
+            dashboard_config(
+                RepositorySpec(
+                    "Templates",
+                    reusable_template_prs=template_config(
+                        path_prefixes=("/pipelines/templates/", "/shared/workflows/"),
+                    ),
+                )
+            ),
+            client,
+            NOW,
+        )
+
+        self.assertEqual(items[0].affected_areas, ["docker/", "validation/"])
+        self.assertEqual(
+            items[0].matched_paths,
+            ["/pipelines/templates/docker/build.yml", "/shared/workflows/validation/check.yml"],
+        )
 
     def test_age_and_stale_state_use_configured_threshold(self):
         client = TemplatePrClient(
@@ -123,7 +165,7 @@ class ReusableTemplatePrTests(unittest.TestCase):
                 pull_request(1, created_at="2026-09-12T12:00:00Z"),
                 pull_request(2, created_at="2026-08-28T11:59:59Z"),
             ],
-            {1: ["/templates/build.yml"], 2: ["/templates/build.yml"]},
+            {1: ["/pipelines/templates/build.yml"], 2: ["/pipelines/templates/build.yml"]},
         )
 
         items = collect_reusable_template_prs(
@@ -137,7 +179,7 @@ class ReusableTemplatePrTests(unittest.TestCase):
         self.assertTrue(by_id[2].stale)
 
     def test_web_url_uses_azure_devops_web_link(self):
-        client = TemplatePrClient([pull_request(1)], {1: ["/templates/build.yml"]})
+        client = TemplatePrClient([pull_request(1)], {1: ["/pipelines/templates/build.yml"]})
 
         item = collect_reusable_template_prs(
             dashboard_config(RepositorySpec("Templates", reusable_template_prs=template_config())), client, NOW
@@ -149,7 +191,7 @@ class ReusableTemplatePrTests(unittest.TestCase):
     def test_one_pr_change_lookup_failure_does_not_hide_other_matching_prs(self):
         client = TemplatePrClient(
             [pull_request(1), pull_request(2)],
-            {2: ["/templates/deploy.yml"]},
+            {2: ["/pipelines/templates/deploy.yml"]},
             failing_pr_ids={1},
         )
 
@@ -160,7 +202,7 @@ class ReusableTemplatePrTests(unittest.TestCase):
         self.assertEqual([item.pr_id for item in items], [2])
 
     def test_dashboard_response_has_dedicated_reusable_template_pr_field(self):
-        client = TemplatePrClient([pull_request(1)], {1: ["/templates/build.yml"]})
+        client = TemplatePrClient([pull_request(1)], {1: ["/pipelines/templates/build.yml"]})
 
         dashboard = collect_dashboard(
             dashboard_config(RepositorySpec("Templates", reusable_template_prs=template_config())), client

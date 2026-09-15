@@ -25,11 +25,8 @@ projects:
         reusable_template_prs:
           enabled: true
           max_age_days: 14
-          templates:
-            - path: /templates/build.yml
-              name: Build Template
-            - path: /templates/deploy.yml
-              name: Deploy Template
+          path_prefixes:
+            - /pipelines/templates/
       - name: Examples
       - name: TestConfig
     pipelines:

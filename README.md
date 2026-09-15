@@ -38,11 +38,11 @@ current operational state of each repository's default branch.
 
 For a repository such as `Templates` that contains reusable Azure DevOps
 workflows, an optional operational section highlights open PRs that actually
-modify configured template files. It is separate from Repo CI Status and is
-not a general pull-request browser.
+modify files below configured template directories. It is separate from Repo
+CI Status and is not a general pull-request browser.
 
-Enable it on the relevant repository and list the exact repository-relative
-template paths to watch:
+Enable it on the relevant repository and list one or more repository-relative
+directory prefixes to watch:
 
 ```yaml
 repositories:
@@ -50,15 +50,23 @@ repositories:
     reusable_template_prs:
       enabled: true
       max_age_days: 14
-      templates:
-        - path: /templates/build.yml
-          name: Build Template
+      path_prefixes:
+        - /pipelines/templates/
 ```
 
 The dashboard lists active PRs once, retains only those targeting the
 repository's Azure DevOps default branch, and fetches changed paths from the
-latest PR iteration. A PR appears only when one of those paths exactly equals a
-configured template path. It does not infer impact from a PR title or branch.
+latest PR iteration. A PR appears when at least one changed path starts with a
+configured prefix. Leading slashes are normalized before comparison, and the
+prefixes are normalized to end in `/`, so matching is deterministic and does
+not use PR titles, branches, filenames, or fuzzy rules. Multiple prefixes are
+supported.
+
+For each matching PR, the dashboard derives a compact affected-area summary:
+the first directory under the longest matching prefix (for example `docker/`),
+or the filename for a file directly below that prefix. Full matched paths are
+available in the API response but are intentionally not expanded in the main
+card.
 
 PR age is the number of completed 24-hour periods since Azure DevOps recorded
 its creation time. A PR is `Fresh` at or below `max_age_days`, and `Stale` when

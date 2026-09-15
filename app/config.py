@@ -8,14 +8,13 @@ from typing import Any
 
 import yaml
 
-from app.models import PipelineSpec, RepositorySpec, ReusableTemplate, ReusableTemplatePRConfig
+from app.models import PipelineSpec, RepositorySpec, ReusableTemplatePRConfig
 
 
 VALID_ROLES = {"image-build", "deployment", "smoke-test", "pr-validation"}
 PIPELINE_FIELDS = {"name", "definition_id", "role", "repository"}
 REPOSITORY_FIELDS = {"name", "ci_definition_ids", "reusable_template_prs"}
-REUSABLE_TEMPLATE_PRS_FIELDS = {"enabled", "max_age_days", "templates"}
-REUSABLE_TEMPLATE_FIELDS = {"path", "name"}
+REUSABLE_TEMPLATE_PRS_FIELDS = {"enabled", "max_age_days", "path_prefixes"}
 CONFIGURATION_FIELDS = {"organization_url", "projects"}
 
 
@@ -59,26 +58,23 @@ def _reusable_template_pr_config(raw_config: Any, repository_name: str) -> Reusa
     max_age_days = raw_config.get("max_age_days", 14)
     if not isinstance(max_age_days, int) or max_age_days < 0:
         raise ConfigError(f"repository {repository_name!r} reusable_template_prs max_age_days must be a non-negative integer.")
-    raw_templates = raw_config.get("templates", [])
-    if not isinstance(raw_templates, list):
-        raise ConfigError(f"repository {repository_name!r} reusable_template_prs templates must be a list.")
-    templates: list[ReusableTemplate] = []
-    for raw_template in raw_templates:
-        if not isinstance(raw_template, dict):
-            raise ConfigError(f"repository {repository_name!r} reusable template must be a mapping.")
-        unexpected_fields = set(raw_template) - REUSABLE_TEMPLATE_FIELDS
-        if unexpected_fields:
+    raw_prefixes = raw_config.get("path_prefixes", [])
+    if not isinstance(raw_prefixes, list):
+        raise ConfigError(f"repository {repository_name!r} reusable_template_prs path_prefixes must be a list.")
+    path_prefixes: list[str] = []
+    for raw_prefix in raw_prefixes:
+        if not isinstance(raw_prefix, str) or not raw_prefix.strip():
             raise ConfigError(
-                f"repository {repository_name!r} reusable template has unsupported fields: {sorted(unexpected_fields)}."
+                f"repository {repository_name!r} reusable_template_prs path prefixes must be non-empty strings."
             )
-        path = str(_required(raw_template, "path", f"repository {repository_name} reusable template"))
-        if not path.startswith("/"):
-            raise ConfigError(f"repository {repository_name!r} reusable template path must start with '/'.")
-        name = raw_template.get("name")
-        templates.append(ReusableTemplate(path=path, name=str(name) if name is not None else None))
-    if enabled and not templates:
-        raise ConfigError(f"repository {repository_name!r} reusable_template_prs requires at least one template when enabled.")
-    return ReusableTemplatePRConfig(enabled=enabled, max_age_days=max_age_days, templates=tuple(templates))
+        normalised_prefix = raw_prefix.strip().strip("/")
+        path_prefixes.append(f"/{normalised_prefix}/" if normalised_prefix else "/")
+    path_prefixes = tuple(path_prefixes)
+    if len(set(path_prefixes)) != len(path_prefixes):
+        raise ConfigError(f"repository {repository_name!r} reusable_template_prs has duplicate path prefixes.")
+    if enabled and not path_prefixes:
+        raise ConfigError(f"repository {repository_name!r} reusable_template_prs requires at least one path prefix when enabled.")
+    return ReusableTemplatePRConfig(enabled=enabled, max_age_days=max_age_days, path_prefixes=path_prefixes)
 
 
 def load_config(path: Path) -> DashboardConfig:

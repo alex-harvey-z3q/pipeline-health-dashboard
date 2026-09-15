@@ -53,10 +53,9 @@ projects:
         reusable_template_prs:
           enabled: true
           max_age_days: 14
-          templates:
-            - path: /templates/build.yml
-              name: Build Template
-            - path: /templates/deploy.yml
+          path_prefixes:
+            - pipelines/templates
+            - /shared/workflows/
 """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.yml"
@@ -66,10 +65,25 @@ projects:
         template_config = config.projects[0].repositories[0].reusable_template_prs
         self.assertTrue(template_config.enabled)
         self.assertEqual(template_config.max_age_days, 14)
-        self.assertEqual([(template.path, template.name) for template in template_config.templates], [
-            ("/templates/build.yml", "Build Template"),
-            ("/templates/deploy.yml", None),
-        ])
+        self.assertEqual(template_config.path_prefixes, ("/pipelines/templates/", "/shared/workflows/"))
+
+    def test_rejects_legacy_exact_template_pr_configuration(self):
+        content = """
+organization_url: https://dev.azure.com/example
+projects:
+  - name: Pipeline Templates
+    repositories:
+      - name: Templates
+        reusable_template_prs:
+          enabled: true
+          templates:
+            - path: /pipelines/templates/build.yml
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.yml"
+            path.write_text(content)
+            with self.assertRaisesRegex(ConfigError, "templates"):
+                load_config(path)
 
     def test_rejects_pipeline_repository_not_declared_by_its_project(self):
         content = """

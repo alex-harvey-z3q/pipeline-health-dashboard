@@ -21,10 +21,10 @@ function renderRows(container, items, render) { container.innerHTML = items.leng
 function reusableTemplatePrs(items) {
   if (!items.length) return "<p class=\"empty\">No open PRs currently modify configured reusable templates.</p>";
   return items.map((pr) => {
-    const templates = pr.affected_templates.map((template) => template.name || template.path).join(", ");
+    const areas = pr.affected_areas.join(", ");
     const age = pr.age_days === null ? "Unknown age" : `${pr.age_days} day${pr.age_days === 1 ? "" : "s"}`;
     const freshness = pr.stale === null ? "Unknown" : pr.stale ? "Stale" : "Fresh";
-    return `<article class="row"><h3>PR ${escapeHtml(pr.pr_id)}: ${escapeHtml(pr.title)} <span class="status ${pr.stale ? "stale" : pr.stale === false ? "fresh" : "unknown"}">${freshness}</span></h3><p>${escapeHtml(pr.project)} / ${escapeHtml(pr.repository)} | ${escapeHtml(pr.source_branch)} to ${escapeHtml(pr.target_branch)} | ${link(pr.web_url, "Open PR")}</p><p>Created: ${escapeHtml(pr.created_at || "Unknown")} | Age: ${escapeHtml(age)}${pr.author ? ` | Author: ${escapeHtml(pr.author)}` : ""}</p><p>Templates: ${escapeHtml(templates)}</p></article>`;
+    return `<article class="row"><h3>PR ${escapeHtml(pr.pr_id)}: ${escapeHtml(pr.title)} <span class="status ${pr.stale ? "stale" : pr.stale === false ? "fresh" : "unknown"}">${freshness}</span></h3><p>${escapeHtml(pr.project)} / ${escapeHtml(pr.repository)} | ${escapeHtml(pr.source_branch)} to ${escapeHtml(pr.target_branch)} | ${link(pr.web_url, "Open PR")}</p><p>Created: ${escapeHtml(pr.created_at || "Unknown")} | Age: ${escapeHtml(age)}${pr.author ? ` | Author: ${escapeHtml(pr.author)}` : ""}</p><p>Template areas: ${escapeHtml(areas)}</p></article>`;
   }).join("");
 }
 

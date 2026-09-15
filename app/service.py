@@ -97,6 +97,26 @@ def _pull_request_age_days(created_at: str | None, now: datetime) -> int | None:
     return max(0, int((now - created).total_seconds() // 86400))
 
 
+def _normalise_repository_path(path: str) -> str:
+    return f"/{path.strip().lstrip('/')}"
+
+
+def _affected_template_areas(changed_paths: set[str], path_prefixes: tuple[str, ...]) -> tuple[list[str], list[str]]:
+    matched_paths: list[str] = []
+    affected_areas: list[str] = []
+    for changed_path in sorted(_normalise_repository_path(path) for path in changed_paths):
+        matching_prefixes = [prefix for prefix in path_prefixes if changed_path.startswith(prefix)]
+        if not matching_prefixes:
+            continue
+        prefix = max(matching_prefixes, key=len)
+        relative_path = changed_path.removeprefix(prefix)
+        area = f"{relative_path.split('/', 1)[0]}/" if "/" in relative_path else relative_path
+        matched_paths.append(changed_path)
+        if area not in affected_areas:
+            affected_areas.append(area)
+    return affected_areas, matched_paths
+
+
 def _reusable_template_prs_for_repository(
     client: AzureDevOpsClient,
     project: str,
@@ -122,8 +142,8 @@ def _reusable_template_prs_for_repository(
             changed_paths = pull_request_changed_paths(client, project, repository, pr_id)
         except (AzureDevOpsError, KeyError, TypeError, ValueError):
             continue
-        affected_templates = [template for template in config.templates if template.path in changed_paths]
-        if not affected_templates:
+        affected_areas, matched_paths = _affected_template_areas(changed_paths, config.path_prefixes)
+        if not matched_paths:
             continue
         created_at = pull_request.get("creationDate")
         age_days = _pull_request_age_days(created_at, now)
@@ -139,7 +159,8 @@ def _reusable_template_prs_for_repository(
                 created_at=created_at,
                 age_days=age_days,
                 stale=age_days > config.max_age_days if age_days is not None else None,
-                affected_templates=affected_templates,
+                affected_areas=affected_areas,
+                matched_paths=matched_paths,
                 web_url=pull_request_web_url(client.organization_url, project, repository, pull_request),
                 author=(
                     str(created_by.get("displayName") or created_by.get("uniqueName"))
